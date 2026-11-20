@@ -1,0 +1,4 @@
+/** Adapted from app-skeleton audit module. */
+const SECRET=/(password|otp|token|authorization|cookie|secret|credential|pan|card|cvv|api.?key)/i;
+export function redact(value,depth=0){if(depth>5)return '[MAX_DEPTH]';if(Array.isArray(value))return value.slice(0,200).map(v=>redact(v,depth+1));if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).slice(0,200).map(([k,v])=>[k,SECRET.test(k)?'[REDACTED]':redact(v,depth+1)]));if(typeof value==='string')return value.slice(0,2000);return value}
+export function createAuditEvent(e){for(const k of ['id','tenantId','actorId','action','resource','correlationId'])if(!e?.[k])throw new Error('Missing audit field: '+k);if(!['success','failure','denied'].includes(e.outcome??'success'))throw new Error('Invalid audit outcome');return Object.freeze({...e,metadata:redact(e.metadata??{}),occurredAt:e.occurredAt??new Date().toISOString()})}

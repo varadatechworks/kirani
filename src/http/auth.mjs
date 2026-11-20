@@ -1,0 +1,2 @@
+import {bearerToken,verifyAccessToken} from '../security/jwt.mjs';
+export function createAuthenticator(config){return request=>{const token=bearerToken(request.headers.authorization);if(!token)throw Object.assign(new Error('Authentication required'),{status:401,code:'AUTH_REQUIRED'});try{return verifyAccessToken(token,config)}catch{throw Object.assign(new Error('Authentication failed'),{status:401,code:'AUTH_INVALID'})}}}
