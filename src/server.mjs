@@ -1,7 +1,6 @@
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { extname, resolve, sep } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { correlationId, safeApiError } from './shared/skeleton/observability.mjs';
 
