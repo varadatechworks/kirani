@@ -215,7 +215,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
 
   assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
   const cancelled=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Customer requested cancellation'})});
-  assert.equal(cancelled.status,409);assert.equal(cancelled.error.code,'ORDER_ALREADY_PACKED');
+  assert.equal(cancelled.status,409);assert.equal(cancelled.error.code,'ORDER_NOT_CANCELLABLE');
   const secondCancel=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Duplicate cancellation attempt'})});
   assert.equal(secondCancel.status,409);
   const adminAddressAccess=await call('admin','/customers/me/addresses');
