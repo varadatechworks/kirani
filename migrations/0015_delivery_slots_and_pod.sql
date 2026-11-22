@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS delivery_assignments(
  started_at timestamptz,completed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(tenant_id,order_id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS delivery_assignments_one_active_order_uq ON delivery_assignments(tenant_id,order_id) WHERE status IN ('ASSIGNED','OUT_FOR_DELIVERY');
 CREATE TABLE IF NOT EXISTS delivery_events(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenants(id),
  assignment_id uuid NOT NULL REFERENCES delivery_assignments(id),
