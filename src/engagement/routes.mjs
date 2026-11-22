@@ -82,7 +82,7 @@ export async function handleEngagementRoutes(ctx){
  if(method==='GET'&&path==='/api/v1/admin/reports/export'){
   const params=new URL(req.url,'http://kirani.local').searchParams,type=params.get('type')||'operations';
   const from=params.get('from')||new Date(Date.now()-29*86400000).toISOString().slice(0,10),to=params.get('to')||new Date().toISOString().slice(0,10);
-  const validDate=x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString().slice(0,10)===x;
+  const validDate=x=>/^\d{4}-\d{2}-\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString().slice(0,10)===x;
   if(!['operations','finance','traceability'].includes(type)||!validDate(from)||!validDate(to)||from>to)fail(422,'REPORT_EXPORT_FILTER_INVALID','Choose a supported report and a valid date range.');if(Date.parse(to+'T00:00:00Z')-Date.parse(from+'T00:00:00Z')>366*86400000)fail(422,'REPORT_EXPORT_RANGE_TOO_LARGE','Report exports are limited to 366 days.');
   let columns,rows;
   if(type==='operations'){
