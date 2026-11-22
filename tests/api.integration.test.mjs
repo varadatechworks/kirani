@@ -37,14 +37,14 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const dashboard=await call('admin','/admin/dashboard');
   assert.equal(dashboard.status,200);assert.equal(dashboard.data.openCycles,1);
   const today=new Date().toISOString().slice(0,10);
-  const loyaltyPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:1,pointValuePaise:50,redemptionCapBps:2000,minimumRedemptionPoints:1,maximumRedemptionPoints:1000})});
+  const loyaltyPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:1,pointValuePaise:50,redemptionCapBps:2000,minimumRedemptionPoints:1,maximumRedemptionPoints:1000,expiryDays:365})});
   assert.equal(loyaltyPolicy.status,200);assert.equal(loyaltyPolicy.data.version,1);
   const loyaltyWallet=await call('customer','/customers/me/loyalty');
   assert.equal(loyaltyWallet.status,200);assert.equal(loyaltyWallet.data.activePolicy.pointValuePaise,50);
   const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
   const closePolicy=await call('admin','/admin/loyalty/policies/'+loyaltyPolicy.data.id+'/close',{method:'POST',body:JSON.stringify({effectiveTo:today})});
   assert.equal(closePolicy.status,200);assert.equal(String(closePolicy.data.effectiveTo).slice(0,10),today);
-  const nextPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:tomorrow,pointsPerRupee:2,pointValuePaise:75,redemptionCapBps:2500,minimumRedemptionPoints:1,maximumRedemptionPoints:1500})});
+  const nextPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:tomorrow,pointsPerRupee:2,pointValuePaise:75,redemptionCapBps:2500,minimumRedemptionPoints:1,maximumRedemptionPoints:1500,expiryDays:365})});
   assert.equal(nextPolicy.status,200);assert.equal(nextPolicy.data.version,2);
   const policyVersions=await call('admin','/admin/loyalty/policies');assert.equal(policyVersions.status,200);assert.equal(policyVersions.data.length,2);
   const overlappingPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:3,pointValuePaise:100})});
@@ -278,6 +278,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(refundProcessed.status,200);assert.equal(refundProcessed.data.status,'PROCESSED');assert.equal(refundProcessed.data.paymentStatus,'PARTIALLY_REFUNDED');
   const refundHistory=await call('customer','/customers/me/refund-requests');
   assert.ok(refundHistory.data.some(x=>x.id===refundRequest.data.id&&x.status==='PROCESSED'));
+  const accountId=(await pool.query('SELECT id FROM loyalty_accounts WHERE tenant_id=$1 AND customer_id=$2',[tenant,userIds.customer])).rows[0].id;
+  await pool.query("UPDATE loyalty_point_lots SET expires_at=now()-interval '1 minute' WHERE tenant_id=$1 AND account_id=$2 AND points_remaining>0",[tenant,accountId]);
+  const expiredPoints=await call('admin','/admin/loyalty/expire',{method:'POST',body:JSON.stringify({})});
+  assert.equal(expiredPoints.status,200);assert.ok(BigInt(expiredPoints.data.expiredPoints)>0n);
+  const walletAfterExpiry=await call('customer','/customers/me/loyalty');
+  assert.equal(walletAfterExpiry.status,200);assert.equal(walletAfterExpiry.data.balancePoints,'0');assert.ok(walletAfterExpiry.data.ledger.some(x=>x.type==='EXPIRY'));
+
 
 
 
