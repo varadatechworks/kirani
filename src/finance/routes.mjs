@@ -31,7 +31,7 @@ export async function handleRazorpayWebhook(ctx){
    await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[event.rows[0].id]);
    return {received:true,replayed:false,status:row.status==='PAID'?'PAID':'FAILED'};
   }
-  if(String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))fail(409,'PAYMENT_AMOUNT_MISMATCH','Captured payment amount or currency does not match the Kirani payment intent.');
+  if(!/^\d+$/.test(String(payment.amount??''))||BigInt(payment.amount)<=0n||String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))fail(409,'PAYMENT_AMOUNT_MISMATCH','Captured payment amount or currency does not match the Kirani payment intent.');
   const existing=await client.query("SELECT id FROM payment_transactions WHERE tenant_id=$1 AND provider='RAZORPAY' AND provider_payment_id=$2",[row.tenant_id,payment.id]);
   if(!existing.rowCount){
    const tx=await client.query("INSERT INTO payment_transactions(tenant_id,order_id,method,external_reference,amount_minor,currency,status,recorded_by,provider,provider_order_id,provider_payment_id) VALUES($1,$2,'CARD_EXTERNAL',$3,$4,$5,'CAPTURED',NULL,'RAZORPAY',$6,$7) RETURNING id",[row.tenant_id,row.order_id,'razorpay:'+payment.id,String(payment.amount),payment.currency,providerOrderId,payment.id]);
