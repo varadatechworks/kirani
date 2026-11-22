@@ -1,0 +1,10 @@
+BEGIN;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS price_minor bigint NOT NULL DEFAULT 0 CHECK(price_minor >= 0);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS currency char(3) NOT NULL DEFAULT 'INR';
+CREATE INDEX IF NOT EXISTS farmer_listings_tenant_farmer_idx ON farmer_listings(tenant_id,farmer_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS orders_tenant_customer_idx ON orders(tenant_id,customer_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS baskets_tenant_customer_idx ON baskets(tenant_id,customer_id);
+CREATE INDEX IF NOT EXISTS products_tenant_active_idx ON products(tenant_id,active,category);
+CREATE INDEX IF NOT EXISTS cycles_tenant_status_cutoff_idx ON grocery_cycles(tenant_id,status,cutoff_at);
+CREATE UNIQUE INDEX IF NOT EXISTS grocery_cycles_one_open_per_tenant ON grocery_cycles(tenant_id) WHERE status='OPEN';
+COMMIT;

@@ -1,22 +1,27 @@
-# Kirani UI foundation
+# Kirani UI and API integration notes
 
-## Included preview surfaces
+## Shared design
 
-- Responsive admin workspace with navigation, cycle overview, KPI cards, order movement chart, operational readiness and attention queue.
-- Customer mobile-first experience with monthly basket, category discovery, sample products and mobile navigation.
-- Farmer workspace with profile entry points, procurement, payment summary and seasonal availability review.
-- Responsive layouts and installable-web-app manifest.
+- Botanical green and warm ivory visual system.
+- Responsive admin workspace and mobile-first customer/farmer experiences.
+- Consistent status chips, tables, cards and concise user-facing errors.
 
-## Running locally
+## Live API wiring in this phase
 
-Run `npm install` then `npm start`, and open `http://localhost:3000`. The server serves the UI at `/` and the manifest at `/manifest.webmanifest`.
+The UI has a Connect API action. It accepts a short-lived bearer access token from the configured identity provider and keeps it in JavaScript memory only. It does not persist credentials in browser storage.
 
-## Important implementation boundary
+- Admin overview reads tenant-scoped dashboard metrics.
+- Admin catalogue reads products and can create products with server-side validation.
+- Admin cycle management creates draft cycles and opens/closes cycles through audited API calls.
+- Admin farmer sourcing view reads submitted listings and allows approval/rejection with a mandatory reason.
+- Customer mobile view reads the active cycle and catalogue, loads the recurring basket and saves a new basket version.
+- Farmer mobile view reads own listings and submits new availability for admin review.
+- Order screens read order history; order confirmation and payment are not implemented.
 
-The current UI is a front-end preview using illustrative sample data. Buttons demonstrate navigation and feedback only. It does not create real cycles, orders, farmer listings, payments, approvals or inventory records. Do not use the preview as a production operations console.
+## Data safety
 
-The current API foundation still needs database-backed repositories, authentication/session middleware, authorization enforcement, validated domain endpoints, audit persistence, integration tests and end-to-end tests before live workflows can be enabled. The manifest makes the responsive web experience PWA-installable in supporting browsers; it is not a native Android/iOS binary.
+The browser is not authoritative for prices, roles, tenant IDs or status transitions. The API resolves user and tenant from a signed token and active PostgreSQL user/role membership. All list and detail queries are tenant-scoped; customer order reads are owner-scoped. Farmer listings only become approved through an admin endpoint. The API returns stable errors with correlation IDs.
 
-## Design direction
+## Demo and incomplete areas
 
-Warm ivory canvas, deep botanical green, soft leaf accents, restrained gold highlights, clear status chips, compact data tables, responsive cards and a shared visual language across operator, farmer and customer journeys.
+When no access token is connected, the original visual preview data remains visible and is not real operational data. Payments, refunds, delivery, procurement, mill processing, batch genealogy, package QR trace, loyalty, notifications, recall and full order confirmation remain future implementation work. Do not use the preview dataset for operational decisions.
