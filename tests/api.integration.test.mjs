@@ -55,7 +55,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(supportReply.status,200);
   const customerTicket=await call('customer','/customers/me/support/'+ticket.data.id);
   assert.equal(customerTicket.status,200);assert.equal(customerTicket.data.messages.length,2);
-  const supportDecision=await call('admin','/admin/support/'+ticket.data.id+'/decision',{method:'POST',body:JSON.stringify({status:'RESOLVED',priority:'NORMAL'})});
+  const supportDecision=await call('admin','/admin/support/'+ticket.data.id+'/decision',{method:'POST',body:JSON.stringify({status:'RESOLVED',priority:'NORMAL',reason:'Issue resolved after delivery window confirmation'})});
   assert.equal(supportDecision.status,200);assert.equal(supportDecision.data.status,'RESOLVED');
   const report=await call('admin','/admin/reports/operations');
   assert.equal(report.status,200);assert.ok(report.data.orders);assert.ok(report.data.inventory);
@@ -247,7 +247,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const captured=await call('admin','/admin/orders/'+order.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'UPI',externalReference:'UPI-CI-'+randomUUID(),amountMinor:order.data.totalMinor,reason:'CI payment settlement reconciliation'})});
   assert.equal(captured.status,200);assert.equal(captured.data.paymentStatus,'PAID');
   const orderPaymentHistory=await call('customer','/customers/me/orders/'+order.data.id+'/payments');
-  assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);
+  assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);const paymentRegister=await call('admin','/admin/payments');assert.equal(paymentRegister.status,200);assert.ok(paymentRegister.data.some(x=>x.orderId===order.data.id));
   const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
   assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);
   const earnedReplay=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
