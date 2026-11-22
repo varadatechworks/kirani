@@ -49,7 +49,7 @@ export async function handleEngagementRoutes(ctx){
    db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='QUARANTINED')::int AS quarantined,count(*) FILTER(WHERE status='RECALLED')::int AS recalled,count(*) FILTER(WHERE expires_on IS NOT NULL AND expires_on<CURRENT_DATE)::int AS expired FROM inventory_lots WHERE tenant_id=$1",[auth.tenantId]),
    db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='RECALLED')::int AS recalled,count(*) FILTER(WHERE status='DELIVERED')::int AS delivered FROM packages WHERE tenant_id=$1",[auth.tenantId]),
    db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='OPEN')::int AS open,count(*) FILTER(WHERE status='CLOSED')::int AS closed FROM inventory_recalls WHERE tenant_id=$1",[auth.tenantId]),
-   db.query("SELECT count(*)::int AS jobs,count(*) FILTER(WHERE status='COMPLETED')::int AS completed,count(*) FILTER(WHERE status='BLOCKED')::int AS blocked FROM processing_jobs WHERE tenant_id=$1",[auth.tenantId])
+   db.query("SELECT count(*)::int AS jobs,count(*) FILTER(WHERE status='COMPLETED')::int AS completed,count(*) FILTER(WHERE status IN ('QC_PENDING','RECONCILIATION_PENDING','REJECTED'))::int AS blocked FROM processing_jobs WHERE tenant_id=$1",[auth.tenantId])
   ]);return send(res,{inventoryLots:lots.rows[0],packages:packages.rows[0],recalls:recalls.rows[0],processing:processing.rows[0],generatedAt:new Date().toISOString()},cid),true;
  }
  if(method==='GET'&&path==='/api/v1/admin/reports/operations'){
