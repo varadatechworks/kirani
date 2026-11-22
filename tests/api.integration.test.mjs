@@ -96,8 +96,23 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(quarantined.status,200);assert.equal(quarantined.data.status,'QUARANTINED');
   const restored=await call('admin','/admin/inventory/lots/'+lotId+'/quality',{method:'POST',body:JSON.stringify({status:'AVAILABLE',reason:'CI quality release verification'})});
   assert.equal(restored.status,200);assert.equal(restored.data.status,'AVAILABLE');
+  const consumptionKey='ci-consume-'+randomUUID();
+  const consumeReservation=await call('admin','/admin/inventory/reservations',{method:'POST',headers:{'idempotency-key':consumptionKey},body:JSON.stringify({referenceType:'PROCESSING_JOB',referenceId:'CI-JOB-1',items:[{productId:product.data.id,quantity:1}]})});
+  assert.equal(consumeReservation.status,200);
+  const consumed=await call('admin','/admin/inventory/reservations/'+consumeReservation.data.id+'/consume',{method:'POST',body:JSON.stringify({reason:'CI material issued to processing job'})});
+  assert.equal(consumed.status,200);assert.equal(consumed.data.status,'CONSUMED');
+  const consumeAgain=await call('admin','/admin/inventory/reservations/'+consumeReservation.data.id+'/consume',{method:'POST',body:JSON.stringify({reason:'Duplicate issue attempt'})});
+  assert.equal(consumeAgain.status,409);
+  const locations=await call('admin','/admin/inventory/locations');
+  assert.equal(locations.status,200);assert.ok(locations.data.some(x=>x.code==='MAIN'));
+  const secondary=await call('admin','/admin/inventory/locations',{method:'POST',body:JSON.stringify({code:'CI-MILL',name:'CI Mill Store',locationType:'MILL'})});
+  assert.equal(secondary.status,200);
+  const transfer=await call('admin','/admin/inventory/transfers',{method:'POST',body:JSON.stringify({transferNumber:'TRF-CI-'+randomUUID(),lotId,toLocationId:secondary.data.id,reason:'CI full lot transfer test'})});
+  assert.equal(transfer.status,200);assert.equal(transfer.data.status,'COMPLETED');
+  const transfers=await call('admin','/admin/inventory/transfers');
+  assert.equal(transfers.status,200);assert.ok(transfers.data.some(x=>x.id===transfer.data.id));
   const ledger=await call('admin','/admin/inventory/ledger?limit=100');
-  assert.equal(ledger.status,200);assert.ok(ledger.data.some(x=>x.eventType==='RESERVE'));assert.ok(ledger.data.some(x=>x.eventType==='RELEASE'));assert.ok(ledger.data.some(x=>x.eventType==='ADJUSTMENT_IN'));
+  assert.equal(ledger.status,200);assert.ok(ledger.data.some(x=>x.eventType==='RESERVE'));assert.ok(ledger.data.some(x=>x.eventType==='RELEASE'));assert.ok(ledger.data.some(x=>x.eventType==='ADJUSTMENT_IN'));assert.ok(ledger.data.some(x=>x.eventType==='CONSUME'));assert.ok(ledger.data.some(x=>x.eventType==='TRANSFER_OUT'));
   const customerInventory=await call('customer','/admin/inventory/lots');
   assert.equal(customerInventory.status,403);
 
