@@ -41,6 +41,15 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(loyaltyPolicy.status,200);assert.equal(loyaltyPolicy.data.version,1);
   const loyaltyWallet=await call('customer','/customers/me/loyalty');
   assert.equal(loyaltyWallet.status,200);assert.equal(loyaltyWallet.data.activePolicy.pointValuePaise,50);
+  const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const closePolicy=await call('admin','/admin/loyalty/policies/'+loyaltyPolicy.data.id+'/close',{method:'POST',body:JSON.stringify({effectiveTo:today})});
+  assert.equal(closePolicy.status,200);assert.equal(String(closePolicy.data.effectiveTo).slice(0,10),today);
+  const nextPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:tomorrow,pointsPerRupee:2,pointValuePaise:75,redemptionCapBps:2500,minimumRedemptionPoints:1,maximumRedemptionPoints:1500})});
+  assert.equal(nextPolicy.status,200);assert.equal(nextPolicy.data.version,2);
+  const policyVersions=await call('admin','/admin/loyalty/policies');assert.equal(policyVersions.status,200);assert.equal(policyVersions.data.length,2);
+  const overlappingPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:3,pointValuePaise:100})});
+  assert.equal(overlappingPolicy.status,409);assert.equal(overlappingPolicy.error.code,'LOYALTY_POLICY_DATE_OVERLAP');
+
   const notification=await call('admin','/admin/notifications',{method:'POST',body:JSON.stringify({category:'SYSTEM',title:'Kirani test notice',body:'Notification inbox integration test',roles:['customer']})});
   assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,1);
   const inbox=await call('customer','/customers/me/notifications');
@@ -249,7 +258,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const orderPaymentHistory=await call('customer','/customers/me/orders/'+order.data.id+'/payments');
   assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);const paymentRegister=await call('admin','/admin/payments');assert.equal(paymentRegister.status,200);assert.ok(paymentRegister.data.some(x=>x.orderId===order.data.id));
   const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
-  assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);
+  assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);const earnedWallet=await call('customer','/customers/me/loyalty');assert.ok(earnedWallet.data.ledger.some(x=>x.policyVersion===1&&x.pointValuePaiseSnapshot===50));
   const earnedReplay=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
   assert.equal(earnedReplay.status,200);assert.equal(earnedReplay.data.status,'ALREADY_EARNED');
   const secondOrder=await call('customer','/customers/me/orders',{method:'POST',headers:{'idempotency-key':'ci-order-redeem-'+randomUUID()},body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})});
