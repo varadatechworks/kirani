@@ -298,6 +298,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(earnedReplay.status,200);assert.equal(earnedReplay.data.status,'ALREADY_EARNED');
   const secondOrder=await call('customer','/customers/me/orders',{method:'POST',headers:{'idempotency-key':'ci-order-redeem-'+randomUUID()},body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})});
   assert.equal(secondOrder.status,200);
+  const providerNotConfigured=await call('customer','/customers/me/orders/'+secondOrder.data.id+'/payment-intent',{method:'POST',body:JSON.stringify({})});assert.equal(providerNotConfigured.status,503);assert.equal(providerNotConfigured.error.code,'PAYMENT_PROVIDER_NOT_CONFIGURED');
   const redemptionKey='ci-loyalty-'+randomUUID();
   const redeemed=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
   assert.equal(redeemed.status,200);assert.equal(redeemed.data.pointsRedeemed,'10');
