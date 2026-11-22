@@ -277,6 +277,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const packed=await call('admin','/admin/packing/packages',{method:'POST',body:JSON.stringify({orderId:order.data.id,packageNumber:'PKG-CI-'+randomUUID(),items:[{orderItemId:orderDetail.data.items[0].id,quantity:.4,allocations:[{lotId:packable.id,quantity:.4}]}]})});
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
+  const tracePage=await fetch(base+packed.data.tracePath.replace('/api/v1/public/trace/','/trace/'));assert.equal(tracePage.status,200);assert.match(await tracePage.text(),/Product trace/);
   const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
   const slot=await call('admin','/admin/delivery/slots',{method:'POST',body:JSON.stringify({slotCode:'CI-AM-'+randomUUID().slice(0,5),deliveryDate:new Date(Date.now()+86400000).toISOString().slice(0,10),startsAt:'09:00',endsAt:'11:00',capacity:5,cutoffAt:new Date(Date.now()+3600000).toISOString()})});
   assert.equal(slot.status,200);
