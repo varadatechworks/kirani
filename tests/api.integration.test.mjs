@@ -51,6 +51,28 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(saved.status,200);assert.equal(saved.data.version,1);
   const basket=await call('customer','/customers/me/recurring-basket');
   assert.equal(basket.status,200);assert.equal(basket.data.items.length,1);assert.equal(basket.data.items[0].quantity,'2.000');
+  const address=await call('customer','/customers/me/addresses',{method:'POST',body:JSON.stringify({label:'Home',recipientName:'CI Customer',phone:'+919876543210',line1:'12 Test Road',locality:'Test Layout',city:'Bengaluru',state:'Karnataka',postalCode:'560001',isDefault:true})});
+  assert.equal(address.status,200);assert.equal(address.data.isDefault,true);
+  const addresses=await call('customer','/customers/me/addresses');
+  assert.equal(addresses.status,200);assert.equal(addresses.data.length,1);
+  const deliveryDate=(await pool.query('SELECT (current_date+1)::text AS d')).rows[0].d;
+  const preview=await call('customer','/customers/me/orders/preview',{method:'POST',body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})});
+  assert.equal(preview.status,200);assert.equal(preview.data.items.length,1);assert.equal(preview.data.totalMinor,'17000');
+  const idempotencyKey='ci-order-'+randomUUID();
+  const orderOptions={method:'POST',headers:{'idempotency-key':idempotencyKey},body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})};
+  const order=await call('customer','/customers/me/orders',orderOptions);
+  assert.equal(order.status,200);assert.equal(order.data.fulfilmentStatus,'PLACED');assert.equal(order.data.totalMinor,'17000');
+  const replay=await call('customer','/customers/me/orders',orderOptions);
+  assert.equal(replay.status,200);assert.equal(replay.data.id,order.data.id);assert.equal(replay.data.idempotentReplay,true);
+  const orderDetail=await call('customer','/orders/'+order.data.id);
+  assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
+  const cancelled=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Customer requested cancellation'})});
+  assert.equal(cancelled.status,200);assert.equal(cancelled.data.fulfilmentStatus,'CANCELLED');
+  const secondCancel=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Duplicate cancellation attempt'})});
+  assert.equal(secondCancel.status,409);
+  const adminAddressAccess=await call('admin','/customers/me/addresses');
+  assert.equal(adminAddressAccess.status,403);
+
   const forbidden=await call('customer','/admin/dashboard');
   assert.equal(forbidden.status,403);
 });
