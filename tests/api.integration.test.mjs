@@ -20,10 +20,12 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])roleIds[role]=(await pool.query('INSERT INTO roles(tenant_id,code,name) VALUES($1,$2,$3) RETURNING id',[tenant,role,role])).rows[0].id;
   const userIds={};
   for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])userIds[role]=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,$2,$3,'active') RETURNING id",[tenant,'CI '+role,role+'-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  userIds.admin2=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'CI second admin',$2,'active') RETURNING id",[tenant,'admin2-'+randomUUID()+'@kirani.test'])).rows[0].id;
   for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds.admin2,roleIds.admin]);
   const cycle=(await pool.query("INSERT INTO grocery_cycles(tenant_id,code,starts_on,delivery_from,delivery_to,cutoff_at,status) VALUES($1,$2,current_date,current_date,current_date+3,now()+interval '2 days','OPEN') RETURNING id",[tenant,'CI-'+randomUUID()])).rows[0].id;
   const token=role=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const header=enc({alg:'HS256',typ:'JWT'});const claims=enc({sub:userIds[role],tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]});const unsigned=header+'.'+claims;return unsigned+'.'+createHmac('sha256',secret).update(unsigned).digest('base64url');};
-  const tokens={admin:token('admin'),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator'),delivery_operator:token('delivery_operator')};
+  const tokens={admin:token('admin'),admin2:(()=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const h=enc({alg:'HS256',typ:'JWT'}),p=enc({sub:userIds.admin2,tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID()});const u=h+'.'+p;return u+'.'+createHmac('sha256',secret).update(u).digest('base64url')})(),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator'),delivery_operator:token('delivery_operator')};
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -89,6 +91,23 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(secondReceipt.status,200);assert.equal(secondReceipt.data.purchaseOrderStatus,'RECEIVED');
   const receipts=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts');
   assert.equal(receipts.status,200);assert.equal(receipts.data.length,2);
+  const payables=await call('admin','/admin/farmer-payables');
+  assert.equal(payables.status,200);assert.equal(payables.data.length,2);
+  const farmerPayables=await call('farmer','/farmers/me/payables');
+  assert.equal(farmerPayables.status,200);assert.equal(farmerPayables.data.length,2);
+  const adjustment=await call('admin','/admin/farmer-payables/'+payables.data[0].id+'/adjustments',{method:'POST',body:JSON.stringify({amountMinor:500,reason:'Documented quality handling deduction'})});
+  assert.equal(adjustment.status,200);assert.equal(adjustment.data.deductionMinor,'500');
+  const settlement=await call('admin','/admin/farmer-settlements',{method:'POST',body:JSON.stringify({farmerId:userIds.farmer,settlementNumber:'SET-CI-'+randomUUID()})});
+  assert.equal(settlement.status,200);assert.equal(settlement.data.status,'DRAFT');
+  const sameMaker=await call('admin','/admin/farmer-settlements/'+settlement.data.id+'/approve',{method:'POST',body:JSON.stringify({})});
+  assert.equal(sameMaker.status,403);assert.equal(sameMaker.error.code,'MAKER_CHECKER_REQUIRED');
+  const approvedSettlement=await call('admin2','/admin/farmer-settlements/'+settlement.data.id+'/approve',{method:'POST',body:JSON.stringify({})});
+  assert.equal(approvedSettlement.status,200);assert.equal(approvedSettlement.data.status,'APPROVED');
+  const paidSettlement=await call('admin','/admin/farmer-settlements/'+settlement.data.id+'/record-paid',{method:'POST',body:JSON.stringify({bankReference:'UTR-CI-'+randomUUID(),reason:'Bank transfer confirmed'})});
+  assert.equal(paidSettlement.status,200);assert.equal(paidSettlement.data.status,'PAID');
+  const farmerSettlements=await call('farmer','/farmers/me/settlements');
+  assert.equal(farmerSettlements.status,200);assert.equal(farmerSettlements.data[0].status,'PAID');
+
   const stock=(await pool.query('SELECT count(*)::int AS lots,COALESCE(sum(quantity_available),0)::text AS available FROM inventory_lots WHERE tenant_id=$1',[tenant])).rows[0];
   assert.equal(stock.lots,2);assert.equal(stock.available,'7.000');
   const overReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-OVER-'+randomUUID(),items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:1,quantityQualityAccepted:1,quantityRejected:0,lotCode:'LOT-OVER-'+randomUUID()}]})});
@@ -224,7 +243,11 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(deliveryStart.status,200);assert.equal(deliveryStart.data.status,'OUT_FOR_DELIVERY');
   const pod=await call('delivery_operator','/delivery/assignments/'+deliveryAssignment.data.id+'/pod',{method:'POST',body:JSON.stringify({latitude:12.9716,longitude:77.5946,receivedBy:'CI Recipient',reason:'CI partial delivery accepted',cashCollected:0,items:[{orderItemId:orderDetail.data.items[0].id,quantityDelivered:0.4,quantityRefused:0,reason:'Remaining quantity requires another packed dispatch'}]})});
   assert.equal(pod.status,200);assert.equal(pod.data.outcome,'PARTIAL');assert.equal(pod.data.status,'PARTIALLY_DELIVERED');
-  await pool.query("UPDATE orders SET fulfilment_status='DELIVERED',payment_status='SETTLED' WHERE id=$1 AND tenant_id=$2",[order.data.id,tenant]);
+  await pool.query("UPDATE orders SET fulfilment_status='DELIVERED' WHERE id=$1 AND tenant_id=$2",[order.data.id,tenant]);
+  const captured=await call('admin','/admin/orders/'+order.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'UPI',externalReference:'UPI-CI-'+randomUUID(),amountMinor:order.data.totalMinor,reason:'CI payment settlement reconciliation'})});
+  assert.equal(captured.status,200);assert.equal(captured.data.paymentStatus,'PAID');
+  const orderPaymentHistory=await call('customer','/customers/me/orders/'+order.data.id+'/payments');
+  assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);
   const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
   assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);
   const earnedReplay=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
@@ -236,7 +259,17 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(redeemed.status,200);assert.equal(redeemed.data.pointsRedeemed,'10');
   const redemptionReplay=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
   assert.equal(redemptionReplay.status,200);assert.equal(redemptionReplay.data.replayed,true);
-  const finalWallet=await call('customer','/customers/me/loyalty');assert.equal(finalWallet.status,200);assert.ok(BigInt(finalWallet.data.balancePoints)>=0n);
+  const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:secondOrder.data.totalMinor,reason:'CI second order payment'})});
+  assert.equal(secondPayment.status,200);
+  const refundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:100,reason:'Customer requested a partial refund for test'})});
+  assert.equal(refundRequest.status,200);assert.equal(refundRequest.data.status,'REQUESTED');
+  const refundDecision=await call('admin','/admin/refunds/'+refundRequest.data.id+'/decision',{method:'POST',body:JSON.stringify({decision:'APPROVE',reason:'Refund evidence verified'})});
+  assert.equal(refundDecision.status,200);assert.equal(refundDecision.data.status,'APPROVED');
+  const refundProcessed=await call('admin','/admin/refunds/'+refundRequest.data.id+'/record-processed',{method:'POST',body:JSON.stringify({externalReference:'REFUND-CI-'+randomUUID(),reason:'Refund externally completed and reconciled'})});
+  assert.equal(refundProcessed.status,200);assert.equal(refundProcessed.data.status,'PROCESSED');assert.equal(refundProcessed.data.paymentStatus,'PARTIALLY_REFUNDED');
+  const refundHistory=await call('customer','/customers/me/refund-requests');
+  assert.ok(refundHistory.data.some(x=>x.id===refundRequest.data.id&&x.status==='PROCESSED'));
+
 
 
   const recall=await call('admin','/admin/inventory/recalls',{method:'POST',body:JSON.stringify({recallNumber:'RECALL-CI-'+randomUUID(),sourceLotId:sourceForMill.id,reason:'CI source contamination recall exercise'})});
