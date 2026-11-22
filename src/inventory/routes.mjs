@@ -5,6 +5,10 @@ export async function handleInventoryRoutes(ctx){
  const {req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole}=ctx;
  if(!path.startsWith('/api/v1/admin/inventory/'))return false;
  requireRole(auth,'admin');
+ if(method==='GET'&&path==='/api/v1/admin/inventory/reservations'){
+  const q=await db.query(`SELECT r.*,COALESCE(json_agg(json_build_object('lotId',i.lot_id,'productId',i.product_id,'lotCode',il.lot_code,'productName',p.name,'quantity',i.quantity::text)) FILTER(WHERE i.id IS NOT NULL),'[]') AS items FROM inventory_reservations r LEFT JOIN inventory_reservation_items i ON i.reservation_id=r.id AND i.tenant_id=r.tenant_id LEFT JOIN inventory_lots il ON il.id=i.lot_id AND il.tenant_id=i.tenant_id LEFT JOIN products p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE r.tenant_id=$1 GROUP BY r.id ORDER BY r.created_at DESC LIMIT 100`,[auth.tenantId]);
+  return send(res,q.rows.map(x=>({id:x.id,reservationNumber:x.reservation_number,referenceType:x.reference_type,referenceId:x.reference_id,status:x.status,createdAt:x.created_at,items:x.items})),cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/inventory/ledger'){
   const limit=Math.min(200,Math.max(1,Number(url.searchParams.get('limit')||50)));
   const lotId=url.searchParams.get('lotId');
