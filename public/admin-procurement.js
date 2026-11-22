@@ -50,6 +50,7 @@
   root.querySelector('#apRefresh').onclick=()=>renderAdminProcurement().catch(err=>toast(err.message));
   if(window.renderProcessingWorkspace)await window.renderProcessingWorkspace().catch(err=>toast(err.message));
   if(window.renderPackingWorkspace)await window.renderPackingWorkspace().catch(err=>toast(err.message));
+  if(window.renderDeliveryWorkspace)await window.renderDeliveryWorkspace().catch(err=>toast(err.message));
  }
  window.renderAdminProcurement=renderAdminProcurement;
 })();
