@@ -32,7 +32,7 @@ export async function handleRazorpayWebhook(ctx){
    await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[eventRow]);
    return {received:true,replayed:false,status:row.status==='PAID'?'PAID':'FAILED'};
   }
-  if(!/^\\d+$/.test(String(payment.amount??''))||BigInt(payment.amount)<=0n||String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))return markIgnored('Captured amount or currency does not match the payment intent.');
+  if(!/^\d+$/.test(String(payment.amount??''))||BigInt(payment.amount)<=0n||String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))return markIgnored('Captured amount or currency does not match the payment intent.');
   if(row.status==='PAID'&&row.provider_payment_id!==payment.id)return markIgnored('This payment intent already has a different captured payment.');
   const existing=await client.query("SELECT id FROM payment_transactions WHERE tenant_id=$1 AND provider='RAZORPAY' AND provider_payment_id=$2",[row.tenant_id,payment.id]);
   if(!existing.rowCount){
