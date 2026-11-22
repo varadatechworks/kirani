@@ -10,6 +10,7 @@ import { handleFarmerProcurementRoutes } from './procurement/routes.mjs';
 import { handleGoodsReceiptRoutes } from './receiving/routes.mjs';
 import { handleInventoryRoutes } from './inventory/routes.mjs';
 import { handleProcessingRoutes } from './processing/routes.mjs';
+import { handlePackingRoutes, handlePublicTrace } from './packing/routes.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -56,6 +57,7 @@ async function route(req,res,cid){
     res.writeHead(200,{'content-type':types[extname(file)],'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});return res.end(content);
   }
   if(!path.startsWith('/api/v1/'))fail(404,'NOT_FOUND','That page is not available.');
+  const publicDb=requireDb();if(await handlePublicTrace({req,res,cid,path,method,db:publicDb,send,fail}))return;
   const auth=await authenticate(req);const db=requireDb();
 
   if(method==='GET'&&path==='/api/v1/session/me')return send(res,{id:auth.userId,tenantId:auth.tenantId,displayName:auth.displayName,email:auth.email,phone:auth.phone,locale:auth.locale,roles:auth.roles},cid);
@@ -169,6 +171,7 @@ async function route(req,res,cid){
   if(await handleGoodsReceiptRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handleInventoryRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handleProcessingRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
+  if(await handlePackingRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
