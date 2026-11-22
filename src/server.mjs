@@ -102,7 +102,14 @@ async function route(req,res,cid){
     return send(res,cycleShape(r),cid);
   }
 
-  const closeCycle=path.match(new RegExp('^/api/v1/admin/monthly-cycles/([0-9a-f-]+)/close
+  const closeCycle=path.match(new RegExp('^/api/v1/admin/monthly-cycles/([0-9a-f-]+)/close$','i'));
+  if(method==='POST'&&closeCycle){
+    requireRole(auth,'admin');if(!uuid.test(closeCycle[1]))fail(404,'CYCLE_NOT_FOUND','Cycle was not found.');
+    const r=await transaction(async c=>{const q=await c.query("UPDATE grocery_cycles SET status='CLOSED' WHERE id=$1 AND tenant_id=$2 AND status='OPEN' RETURNING *",[closeCycle[1],auth.tenantId]);if(!q.rowCount)fail(409,'CYCLE_NOT_OPEN','Only an open cycle can be closed.');await audit(c,auth,cid,'cycle.closed','grocery_cycle',q.rows[0].id);return q.rows[0];});
+    return send(res,cycleShape(r),cid);
+  }
+
+  if(method==='GET'&&path==='/api/v1/customers/me/recurring-basket'){
     requireRole(auth,'customer');const r=await db.query(`SELECT b.id AS basket_id,b.status AS basket_status,bv.id AS version_id,bv.version,bv.effective_cycle_id,bi.product_id,bi.quantity::text,bi.unit_code,bi.substitution_policy,p.name,p.price_minor,p.currency
       FROM baskets b LEFT JOIN LATERAL (SELECT * FROM basket_versions WHERE basket_id=b.id ORDER BY version DESC LIMIT 1) bv ON true
       LEFT JOIN basket_items bi ON bi.basket_version_id=bv.id LEFT JOIN products p ON p.id=bi.product_id
