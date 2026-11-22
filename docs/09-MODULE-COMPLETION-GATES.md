@@ -80,3 +80,34 @@ Status values: **Not started**, **In progress**, **Code complete**, **UAT verifi
 - Do not count mock data, preview-only UI, TODO routes or provider stubs as completed integration.
 - Keep dependencies and external blockers explicit.
 - Recalculate overall progress by weighted scope, not by averaging a few implemented modules.
+
+
+## Development progress snapshot (UAT excluded)
+
+Snapshot after the customer ordering and farmer procurement implementation commits. These are engineering estimates based on code, automated integration coverage and frontend wiring; they do **not** include UAT sign-off.
+
+| Module | Backend | Frontend | Integration | Development notes |
+|---|---:|---:|---:|---|
+| Tenant isolation and role enforcement | 80% | 50% | 65% | Tenant-scoped API and role checks; full permission matrix and onboarding UX remain |
+| Customer addresses | 95% | 90% | 92% | CRUD, default address, validation and tenant/customer ownership tests |
+| Catalogue | 80% | 75% | 78% | Tenant catalogue, pricing and customer display; effective-dated price/tax rules remain |
+| Monthly cycles | 80% | 70% | 75% | Create/open/close and customer cycle read; full schedule and cutoff UX remains |
+| Recurring basket | 80% | 75% | 78% | Versioned basket and product availability checks; one-time basket and substitutions remain |
+| Order preview and placement | 90% | 85% | 88% | Server-side totals, address snapshot, idempotency and order history |
+| Order cancellation and detail | 85% | 80% | 83% | Customer-owned unpaid placed orders can be cancelled with reason; policy-driven paid/partial cancellation remains |
+| Farmer profile and verification | 90% | 85% | 88% | Profile submission, admin review and farmer-facing status |
+| Farmer seasonal listings | 85% | 75% | 80% | Submission, approval/rejection and audit; availability expiry and edit/withdraw UX remain |
+| Procurement purchase orders | 85% | 80% | 83% | Admin PO issue, farmer accept/reject, partial accepted quantity and allocation release |
+| Goods receipt and quality | 0% | 0% | 0% | Next implementation milestone |
+| Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
+| Inventory, packaging and QR traceability | 0% | 0% | 0% | Not started |
+| Delivery slots and proof of delivery | 10% | 0% | 0% | Delivery date selection only; slot capacity and dispatch remain |
+| Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
+| Farmer payables and settlement | 0% | 0% | 0% | Not started |
+| Loyalty wallet and configurable conversion | 0% | 0% | 0% | Not started |
+| Notifications and support | 0% | 0% | 0% | Not started |
+| Reports and analytics | 20% | 25% | 20% | Dashboard metrics exist; reconciled reporting remains |
+| Production identity, security and operations | 45% | 35% | 40% | JWT/tenant controls, correlation IDs and CI exist; MFA, provider integration, threat review and production operations remain |
+| Native Android and iOS apps | 0% | 0% | 0% | Current mobile experiences are responsive browser previews, not native apps |
+
+**Overall product development is still below 50%.** The next target is to bring each active module to at least 95% development completion before starting its UAT sign-off. A product-wide 95% figure cannot be claimed while goods receipt, processing, inventory, traceability, finance, loyalty, notifications and native apps remain unimplemented.
