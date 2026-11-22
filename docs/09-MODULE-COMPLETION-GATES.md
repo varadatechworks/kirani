@@ -97,7 +97,7 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 | Payments and refunds | 82% | 78% | 88% | Razorpay order-intent creation, checkout UI, raw-body HMAC webhook verification, capture idempotency, amount/currency checks, event exception register and offline reconciliation; live credentials, provider certification and automated refund API remain |
 | Farmer payables and settlement | 85% | 80% | 88% | Bank payout integration, tax/fee policy, settlement reversal and statement export |
 | Loyalty wallet and conversion | 92% | 88% | 92% | Effective-dated conversion, immutable point-value snapshots, expiry-aware point lots, FEFO redemption, expiry sweep and one-level direct referrals; refund clawback/debt and deeper effective-date scenarios remain |
-| Notifications and support | 80% | 75% | 82% | Email/SMS/WhatsApp providers, templates, SLA/escalation, campaigns and delivery receipts |
+| Notifications and support | 90% | 84% | 90% | Opt-in email outbox, Resend worker with retry/backoff, masked delivery register, admin broadcast UI and in-app inbox; SMS/WhatsApp, template management, SLA/escalation, campaigns and delivery receipts remain |
 | Reports and analytics | 75% | 70% | 80% | Operations, finance reconciliation and traceability/quality aggregates; date filters, drill-down, exports, scheduled snapshots and source-ledger cross-checks remain |
 | Audit, privacy and production security | 60% | 50% | 60% | Tenant/role checks, append-only ledgers, correlation/audit events, bounded per-IP API rate limit and security response headers; distributed gateway limits, threat modelling, PII retention/redaction, MFA, secret rotation and penetration testing remain |
 | Localization and accessibility | 35% | 30% | 25% | Complete Kannada translations, locale coverage, keyboard/screen-reader and accessibility testing |
@@ -119,10 +119,22 @@ Implemented on `feat/phase-1-foundation`:
 - Admin workspace for stock adjustment, reservation, release, lot quality actions and ledger review.
 - PostgreSQL integration coverage for reservation replay, balance changes, release, invalid negative adjustment, quality hold/release, ledger events and role denial.
 
-Latest combined CI for processing, inventory, delivery, finance, demand planning and QR traceability: [Kirani CI run 45011814692](https://github.com/varadatechworks/kirani/actions/runs/45011814692) passed migrations and `npm run check`. UAT has not been performed.
+Latest combined CI for processing, inventory, delivery, finance, demand planning, QR traceability and email outbox: [Kirani CI run 45012299820](https://github.com/varadatechworks/kirani/actions/runs/45012299820) passed migrations and `npm run check`. The Resend delivery test uses a mocked provider; no real email was sent. UAT has not been performed.
 
 Remaining inventory work before 98%: deeper concurrent-write and tenant-isolation stress tests, recall closure evidence and browser-level end-to-end verification of the admin controls.
 
+
+## Notification delivery implementation update
+
+Implemented on `feat/phase-1-foundation`:
+- Admin notification broadcast UI with category and role-based audience selection.
+- In-app notices are created only when the recipient has enabled the in-app channel.
+- Email is queued only when the recipient explicitly enabled email for that category and has an email address.
+- Tenant-scoped email outbox, provider-readiness status, masked-recipient delivery register and retry/error state.
+- Resend delivery worker claims jobs under a PostgreSQL advisory lock, stores provider message IDs, retries with exponential backoff and reclaims stale in-progress jobs.
+- Integration coverage verifies opt-in behavior, queue visibility, missing-provider safe behavior and a mocked successful provider send.
+
+Configuration is documented in [Notification delivery setup](12-NOTIFICATION-DELIVERY-SETUP.md). Real delivery remains blocked until a verified sender and deployment secrets are configured. SMS and WhatsApp are not implemented.
 
 ## Processing, inventory and traceability implementation update
 
