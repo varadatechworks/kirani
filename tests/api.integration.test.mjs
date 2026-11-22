@@ -306,7 +306,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(redeemed.status,200);assert.equal(redeemed.data.pointsRedeemed,'10');
   const redemptionReplay=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
   assert.equal(redemptionReplay.status,200);assert.equal(redemptionReplay.data.replayed,true);
-  const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:String(BigInt(secondOrder.data.totalMinor)-500n),reason:'CI second order payment'})});
+  const secondOrderTotal=(await pool.query('SELECT total_minor::text AS total_minor FROM orders WHERE id=$1 AND tenant_id=$2',[secondOrder.data.id,tenant])).rows[0].total_minor;
+  const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:String(BigInt(secondOrderTotal)-500n),reason:'CI second order payment'})});
   assert.equal(secondPayment.status,200);
   const gatewayOrderId='order_ci_'+randomUUID().replaceAll('-','');
   await pool.query("INSERT INTO payment_intents(tenant_id,order_id,provider,provider_order_id,amount_minor,currency,status,created_by) VALUES($1,$2,'RAZORPAY',$3,500,'INR','OPEN',$4)",[tenant,secondOrder.data.id,gatewayOrderId,userIds.customer]);
