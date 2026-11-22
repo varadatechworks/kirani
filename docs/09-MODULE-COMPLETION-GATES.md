@@ -99,7 +99,7 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 | Loyalty wallet and conversion | 92% | 88% | 92% | Effective-dated conversion, immutable point-value snapshots, expiry-aware point lots, FEFO redemption, expiry sweep and one-level direct referrals; refund clawback/debt and deeper effective-date scenarios remain |
 | Notifications and support | 80% | 75% | 82% | Email/SMS/WhatsApp providers, templates, SLA/escalation, campaigns and delivery receipts |
 | Reports and analytics | 60% | 55% | 65% | Financial reconciliation, drill-down, filters, exports and source-ledger cross-checks |
-| Audit, privacy and production security | 55% | 45% | 50% | Threat modelling, rate limiting, PII retention/redaction, MFA, secrets, penetration testing |
+| Audit, privacy and production security | 60% | 50% | 60% | Tenant/role checks, append-only ledgers, correlation/audit events, bounded per-IP API rate limit and security response headers; distributed gateway limits, threat modelling, PII retention/redaction, MFA, secret rotation and penetration testing remain |
 | Localization and accessibility | 35% | 30% | 25% | Complete Kannada translations, locale coverage, keyboard/screen-reader and accessibility testing |
 | Native Android/iOS applications | 0% | 0% | 0% | Not started; current customer/farmer/operator experiences are responsive web/PWA previews |
 | Deployment and operations | 50% | 30% | 40% | Production hosting/identity/provider setup, backups/restore drill, monitoring, load test and rollback runbook |
@@ -164,3 +164,12 @@ Implemented on `feat/phase-1-foundation`:
 - Admin finance/loyalty, support and reports workspaces; customer rewards/inbox/support panels; farmer earnings/settlement view.
 
 External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting, loyalty refund clawback/debt are not yet implemented. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
+
+## Security hardening update
+
+- Added a bounded per-client API rate limiter with configurable `API_RATE_LIMIT_PER_MINUTE` and `API_RATE_WINDOW_MS`; trusted forwarded-IP parsing is opt-in via `TRUST_PROXY=true`.
+- Added frame, content-type, referrer and cross-origin resource policy headers plus HSTS when TLS is direct or a trusted proxy reports HTTPS.
+- Kept same-origin camera/GPS permissions available for operator workflows.
+- Unit tests cover limit windows and trusted-proxy key selection; PostgreSQL integration tests also cover tenant isolation for order and inventory reads.
+
+The in-process limiter is a single-instance safeguard, not a distributed quota. Production multi-instance deployments should enforce an additional shared gateway/WAF limit. MFA, identity-provider integration, secret rotation, threat modelling and penetration testing remain release gates.
