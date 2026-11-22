@@ -5,7 +5,7 @@ export async function handlePublicTrace(ctx){
  const {res,cid,path,method,db,send,fail}=ctx;
  const match=path.match(/^\/api\/v1\/public\/trace\/([0-9a-f-]{36})$/i);
  if(!match||method!=='GET')return false;
- const token=match[1];const p=await db.query('SELECT p.id,p.package_number,p.status,p.packed_at,o.currency FROM packages p JOIN orders o ON o.id=p.order_id AND o.tenant_id=p.tenant_id WHERE p.public_token=$1',[token]);
+ const token=match[1];const p=await db.query('SELECT p.id,p.package_number,p.status,p.packed_at,o.currency FROM packages p JOIN orders o ON o.id=p.order_id AND o.tenant_id=p.tenant_id WHERE p.public_token=$1 AND p.public_token_revoked_at IS NULL',[token]);
  if(!p.rowCount)fail(404,'TRACE_NOT_FOUND','This package trace is unavailable or the code is invalid.');
  const items=await db.query('SELECT pi.id,pi.quantity::text,pi.unit_code,pr.name AS product_name,pr.sku FROM package_items pi JOIN products pr ON pr.id=pi.product_id AND pr.tenant_id=pi.tenant_id WHERE pi.tenant_id=(SELECT tenant_id FROM packages WHERE id=$1) AND pi.package_id=$1 ORDER BY pr.name',[p.rows[0].id]);
  const batches=await db.query(`WITH RECURSIVE trace_outputs(output_id,depth) AS (
@@ -42,7 +42,7 @@ export async function handlePackingRoutes(ctx){
   const qrSvg=await QRCode.toString(traceUrl,{type:'svg',errorCorrectionLevel:'H',margin:2,width:320});
   return send(res,{packageNumber:q.rows[0].package_number,status:q.rows[0].status,packedAt:q.rows[0].packed_at,traceUrl,qrSvg,items:items.rows.map(x=>({productName:x.product_name,quantity:x.quantity,unitCode:x.unit_code}))},cid),true;
  }
- const revokeMatch=path.match(/^\\/api\\/v1\\/admin\\/packing\\/packages\\/([0-9a-f-]{36})\\/revoke-trace$/i);
+ const revokeMatch=path.match(/^\/api\/v1\/admin\/packing\/packages\/([0-9a-f-]{36})\/revoke-trace$/i);
  if(method==='POST'&&revokeMatch){
   const b=await bodyJson(req);if(typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.trim().length>500)fail(422,'TRACE_REVOCATION_REASON_REQUIRED','Provide a reason of at least five characters.');
   const result=await transaction(async client=>{const q=await client.query('SELECT id,public_token_revoked_at FROM packages WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[revokeMatch[1],auth.tenantId]);if(!q.rowCount)fail(404,'PACKAGE_NOT_FOUND','Package was not found.');if(q.rows[0].public_token_revoked_at)return {id:q.rows[0].id,revokedAt:q.rows[0].public_token_revoked_at,replayed:true};const updated=await client.query('UPDATE packages SET public_token_revoked_at=now(),updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING public_token_revoked_at',[revokeMatch[1],auth.tenantId]);await audit(client,auth,cid,'package.trace_revoked','package',revokeMatch[1],{reason:b.reason.trim()});return {id:q.rows[0].id,revokedAt:updated.rows[0].public_token_revoked_at,replayed:false};});
