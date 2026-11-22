@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE inventory_ledger ALTER COLUMN actor_id DROP NOT NULL;
+ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS actor_type text NOT NULL DEFAULT 'USER' CHECK(actor_type IN ('USER','SYSTEM'));
+COMMIT;
