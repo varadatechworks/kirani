@@ -21,11 +21,15 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const userIds={};
   for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])userIds[role]=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,$2,$3,'active') RETURNING id",[tenant,'CI '+role,role+'-'+randomUUID()+'@kirani.test'])).rows[0].id;
   userIds.admin2=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'CI second admin',$2,'active') RETURNING id",[tenant,'admin2-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  userIds.customer2=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'CI referred customer',$2,'active') RETURNING id",[tenant,'customer2-'+randomUUID()+'@kirani.test'])).rows[0].id;
   for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
   await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds.admin2,roleIds.admin]);
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds.customer2,roleIds.customer]);
   const cycle=(await pool.query("INSERT INTO grocery_cycles(tenant_id,code,starts_on,delivery_from,delivery_to,cutoff_at,status) VALUES($1,$2,current_date,current_date,current_date+3,now()+interval '2 days','OPEN') RETURNING id",[tenant,'CI-'+randomUUID()])).rows[0].id;
   const token=role=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const header=enc({alg:'HS256',typ:'JWT'});const claims=enc({sub:userIds[role],tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]});const unsigned=header+'.'+claims;return unsigned+'.'+createHmac('sha256',secret).update(unsigned).digest('base64url');};
   const tokens={admin:token('admin'),admin2:(()=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const h=enc({alg:'HS256',typ:'JWT'}),p=enc({sub:userIds.admin2,tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['admin']});const u=h+'.'+p;return u+'.'+createHmac('sha256',secret).update(u).digest('base64url')})(),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator'),delivery_operator:token('delivery_operator')};
+  const customer2Header=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url'),customer2Claims=Buffer.from(JSON.stringify({sub:userIds.customer2,tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['customer']})).toString('base64url'),customer2Unsigned=customer2Header+'.'+customer2Claims;
+  tokens.customer2=customer2Unsigned+'.'+createHmac('sha256',secret).update(customer2Unsigned).digest('base64url');
   const otherTenant=(await pool.query("INSERT INTO tenants(name) VALUES($1) RETURNING id",['CI Other Tenant '+randomUUID()])).rows[0].id;
   const otherAdminRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'admin','Admin') RETURNING id",[otherTenant])).rows[0].id;
   const otherAdminUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant admin',$2,'active') RETURNING id",[otherTenant,'other-admin-'+randomUUID()+'@kirani.test'])).rows[0].id;
@@ -43,10 +47,19 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const dashboard=await call('admin','/admin/dashboard');
   assert.equal(dashboard.status,200);assert.equal(dashboard.data.openCycles,1);
   const today=new Date().toISOString().slice(0,10);
-  const loyaltyPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:1,pointValuePaise:50,redemptionCapBps:2000,minimumRedemptionPoints:1,maximumRedemptionPoints:1000,expiryDays:365})});
+  const loyaltyPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:1,pointValuePaise:50,redemptionCapBps:2000,minimumRedemptionPoints:1,maximumRedemptionPoints:1000,expiryDays:365,referralRewardPoints:20})});
   assert.equal(loyaltyPolicy.status,200);assert.equal(loyaltyPolicy.data.version,1);
   const loyaltyWallet=await call('customer','/customers/me/loyalty');
   assert.equal(loyaltyWallet.status,200);assert.equal(loyaltyWallet.data.activePolicy.pointValuePaise,50);
+  const referralCode=await call('customer','/customers/me/referral-code');
+  assert.equal(referralCode.status,200);assert.match(referralCode.data.code,/^KRN/);
+  const selfReferral=await call('customer','/customers/me/referrals/accept',{method:'POST',body:JSON.stringify({code:referralCode.data.code})});
+  assert.equal(selfReferral.status,409);assert.equal(selfReferral.error.code,'SELF_REFERRAL_NOT_ALLOWED');
+  const acceptedReferral=await call('customer2','/customers/me/referrals/accept',{method:'POST',body:JSON.stringify({code:referralCode.data.code})});
+  assert.equal(acceptedReferral.status,200);assert.equal(acceptedReferral.data.status,'PENDING');
+  const duplicateReferral=await call('customer2','/customers/me/referrals/accept',{method:'POST',body:JSON.stringify({code:referralCode.data.code})});
+  assert.equal(duplicateReferral.status,409);assert.equal(duplicateReferral.error.code,'REFERRAL_ALREADY_USED');
+
   const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
   const closePolicy=await call('admin','/admin/loyalty/policies/'+loyaltyPolicy.data.id+'/close',{method:'POST',body:JSON.stringify({effectiveTo:today})});
   assert.equal(closePolicy.status,200);assert.equal(String(closePolicy.data.effectiveTo).slice(0,10),today);
@@ -265,6 +278,15 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   await pool.query("UPDATE orders SET fulfilment_status='DELIVERED' WHERE id=$1 AND tenant_id=$2",[order.data.id,tenant]);
   const captured=await call('admin','/admin/orders/'+order.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'UPI',externalReference:'UPI-CI-'+randomUUID(),amountMinor:order.data.totalMinor,reason:'CI payment settlement reconciliation'})});
   assert.equal(captured.status,200);assert.equal(captured.data.paymentStatus,'PAID');
+  const referredOrder=(await pool.query("INSERT INTO orders(tenant_id,customer_id,cycle_id,order_type,fulfilment_status,payment_status,currency,subtotal_minor,discount_minor,tax_minor,total_minor) VALUES($1,$2,$3,'AD_HOC','DELIVERED','PAID','INR',10000,0,0,10000) RETURNING id",[tenant,userIds.customer2,cycle])).rows[0].id;
+  const referralQueue=await call('admin','/admin/loyalty/referrals');assert.equal(referralQueue.status,200);assert.ok(referralQueue.data.some(x=>x.id===acceptedReferral.data.id));
+  const referralReward=await call('admin','/admin/loyalty/referrals/'+acceptedReferral.data.id+'/reward',{method:'POST',body:JSON.stringify({})});
+  assert.equal(referralReward.status,200);assert.equal(referralReward.data.pointsAwarded,'20');assert.equal(referralReward.data.qualifiedOrderId,referredOrder);
+  const referralRewardAgain=await call('admin','/admin/loyalty/referrals/'+acceptedReferral.data.id+'/reward',{method:'POST',body:JSON.stringify({})});
+  assert.equal(referralRewardAgain.status,409);
+  const referralWallet=await call('customer','/customers/me/loyalty');
+  assert.ok(referralWallet.data.ledger.some(x=>x.type==='REFERRAL'&&x.pointsDelta==='20'));
+
   const orderPaymentHistory=await call('customer','/customers/me/orders/'+order.data.id+'/payments');
   assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);const paymentRegister=await call('admin','/admin/payments');assert.equal(paymentRegister.status,200);assert.ok(paymentRegister.data.some(x=>x.orderId===order.data.id));
   const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
