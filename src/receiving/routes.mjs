@@ -1,6 +1,15 @@
 const milli=v=>{const s=String(v);if(!/^\d+(?:\.\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
 export async function handleGoodsReceiptRoutes(ctx){
  const {req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}=ctx;
+ if(method==='GET'&&path==='/api/v1/admin/inventory/lots'){
+  requireRole(auth,'admin');const status=url.searchParams.get('status');const allowed=['AVAILABLE','QUARANTINED','DEPLETED','RECALLED'];if(status&&!allowed.includes(status))fail(422,'INVENTORY_FILTER_INVALID','Choose a valid inventory status.');
+  const q=await db.query(`SELECT il.*,p.name AS product_name,p.sku FROM inventory_lots il JOIN products p ON p.id=il.product_id AND p.tenant_id=il.tenant_id WHERE il.tenant_id=$1 AND ($2::text IS NULL OR il.status=$2) ORDER BY il.received_at DESC LIMIT 200`,[auth.tenantId,status||null]);
+  return send(res,q.rows.map(x=>({id:x.id,productId:x.product_id,productName:x.product_name,sku:x.sku,lotCode:x.lot_code,quantityReceived:String(x.quantity_received),quantityAvailable:String(x.quantity_available),status:x.status,receivedAt:x.received_at})),cid),true;
+ }
+ if(method==='GET'&&path==='/api/v1/admin/inventory/summary'){
+  requireRole(auth,'admin');const q=await db.query(`SELECT p.id AS product_id,p.name AS product_name,p.base_unit,COALESCE(sum(il.quantity_available) FILTER(WHERE il.status='AVAILABLE'),0)::text AS available_quantity,count(il.id)::int AS lot_count,count(il.id) FILTER(WHERE il.status='QUARANTINED')::int AS quarantined_lots FROM products p LEFT JOIN inventory_lots il ON il.product_id=p.id AND il.tenant_id=p.tenant_id WHERE p.tenant_id=$1 GROUP BY p.id ORDER BY p.name LIMIT 200`,[auth.tenantId]);
+  return send(res,q.rows.map(x=>({productId:x.product_id,productName:x.product_name,unitCode:x.base_unit,availableQuantity:x.available_quantity,lotCount:x.lot_count,quarantinedLots:x.quarantined_lots})),cid),true;
+ }
  const match=path.match(/^\/api\/v1\/admin\/procurement\/orders\/([0-9a-f-]+)\/receipts$/i);
  if(!match)return false;
  requireRole(auth,'admin');if(!uuid.test(match[1]))fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
