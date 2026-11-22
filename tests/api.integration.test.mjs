@@ -315,7 +315,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const gatewayBody=JSON.stringify(gatewayPayload);
   const gatewaySignature=createHmac('sha256','ci-razorpay-webhook-secret').update(gatewayBody).digest('hex');
   const gatewayWebhook=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
-  assert.equal(gatewayWebhook.status,200);const gatewayResult=(await gatewayWebhook.json()).data;assert.equal(gatewayResult.paymentStatus,'PAID');
+  assert.equal(gatewayWebhook.status,200);const gatewayResult=(await gatewayWebhook.json()).data;assert.equal(gatewayResult.paymentStatus,'PAID',JSON.stringify(gatewayResult));
   const gatewayReplay=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
   assert.equal(gatewayReplay.status,200);assert.equal((await gatewayReplay.json()).data.replayed,true);
   const duplicateCapturePayload={event:'payment.captured',payload:{payment:{entity:{id:'pay_duplicate_'+randomUUID().replaceAll('-',''),order_id:gatewayOrderId,amount:500,currency:'INR'}}}};
