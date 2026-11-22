@@ -53,7 +53,7 @@ async function route(req,res,cid){
   if(!path.startsWith('/api/v1/'))fail(404,'NOT_FOUND','That page is not available.');
   const auth=await authenticate(req);const db=requireDb();
 
-  if(method==='GET'&&path==='/api/v1/session/me')return send(res,{user:{id:auth.userId,tenantId:auth.tenantId,displayName:auth.displayName,email:auth.email,phone:auth.phone,locale:auth.locale,roles:auth.roles}},cid);
+  if(method==='GET'&&path==='/api/v1/session/me')return send(res,{id:auth.userId,tenantId:auth.tenantId,displayName:auth.displayName,email:auth.email,phone:auth.phone,locale:auth.locale,roles:auth.roles},cid);
 
   if(method==='GET'&&path==='/api/v1/admin/dashboard'){
     requireRole(auth,'admin');
