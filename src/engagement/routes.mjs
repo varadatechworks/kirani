@@ -36,6 +36,22 @@ export async function handleEngagementRoutes(ctx){
  if(method==='GET'&&path==='/api/v1/admin/support'){
   const q=await db.query('SELECT t.*,u.display_name AS customer_name,count(m.id)::int AS message_count FROM support_tickets t JOIN users u ON u.id=t.customer_id LEFT JOIN support_messages m ON m.ticket_id=t.id AND m.tenant_id=t.tenant_id WHERE t.tenant_id=$1 GROUP BY t.id,u.display_name ORDER BY CASE t.priority WHEN \'URGENT\' THEN 0 WHEN \'HIGH\' THEN 1 ELSE 2 END,t.created_at DESC LIMIT 200',[auth.tenantId]);return send(res,q.rows.map(x=>({id:x.id,ticketNumber:x.ticket_number,customerName:x.customer_name,category:x.category,subject:x.subject,status:x.status,priority:x.priority,assignedTo:x.assigned_to,messageCount:x.message_count,createdAt:x.created_at})),cid),true;
  }
+ if(method==='GET'&&path==='/api/v1/admin/reports/finance'){
+  const [payments,refunds,payables,settlements]=await Promise.all([
+   db.query("SELECT COALESCE(sum(amount_minor) FILTER(WHERE entry_type='CAPTURE'),0)::text AS captured_minor,COALESCE(sum(amount_minor) FILTER(WHERE entry_type='REFUND'),0)::text AS refunded_minor,count(DISTINCT order_id) FILTER(WHERE entry_type='CAPTURE')::int AS paid_orders FROM payment_ledger WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*) FILTER(WHERE status='REQUESTED')::int AS requested,count(*) FILTER(WHERE status='APPROVED')::int AS approved,count(*) FILTER(WHERE status='PROCESSED')::int AS processed FROM refund_requests WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*) FILTER(WHERE status='OPEN')::int AS open_count,COALESCE(sum(net_minor) FILTER(WHERE status='OPEN'),0)::text AS open_minor,count(*) FILTER(WHERE status='IN_SETTLEMENT')::int AS in_settlement_count,COALESCE(sum(net_minor) FILTER(WHERE status='IN_SETTLEMENT'),0)::text AS in_settlement_minor,count(*) FILTER(WHERE status='SETTLED')::int AS settled_count,COALESCE(sum(net_minor) FILTER(WHERE status='SETTLED'),0)::text AS settled_minor FROM farmer_payables WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*) FILTER(WHERE status='DRAFT')::int AS draft,count(*) FILTER(WHERE status='APPROVED')::int AS approved,count(*) FILTER(WHERE status='PAID')::int AS paid,COALESCE(sum(net_minor) FILTER(WHERE status='PAID'),0)::text AS paid_minor FROM farmer_settlement_batches WHERE tenant_id=$1",[auth.tenantId])
+  ]);return send(res,{payments:payments.rows[0],refunds:refunds.rows[0],farmerPayables:payables.rows[0],farmerSettlements:settlements.rows[0],generatedAt:new Date().toISOString()},cid),true;
+ }
+ if(method==='GET'&&path==='/api/v1/admin/reports/traceability'){
+  const [lots,packages,recalls,processing]=await Promise.all([
+   db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='QUARANTINED')::int AS quarantined,count(*) FILTER(WHERE status='RECALLED')::int AS recalled,count(*) FILTER(WHERE expires_on IS NOT NULL AND expires_on<CURRENT_DATE)::int AS expired FROM inventory_lots WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='RECALLED')::int AS recalled,count(*) FILTER(WHERE status='DELIVERED')::int AS delivered FROM packages WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='OPEN')::int AS open,count(*) FILTER(WHERE status='CLOSED')::int AS closed FROM inventory_recalls WHERE tenant_id=$1",[auth.tenantId]),
+   db.query("SELECT count(*)::int AS jobs,count(*) FILTER(WHERE status='COMPLETED')::int AS completed,count(*) FILTER(WHERE status='BLOCKED')::int AS blocked FROM processing_jobs WHERE tenant_id=$1",[auth.tenantId])
+  ]);return send(res,{inventoryLots:lots.rows[0],packages:packages.rows[0],recalls:recalls.rows[0],processing:processing.rows[0],generatedAt:new Date().toISOString()},cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/reports/operations'){
   const [orders,procurement,inventory,delivery,tickets]=await Promise.all([
    db.query('SELECT count(*)::int AS total,count(*) FILTER(WHERE fulfilment_status NOT IN (\'CANCELLED\',\'DELIVERED\'))::int AS open,count(*) FILTER(WHERE fulfilment_status=\'DELIVERED\')::int AS delivered,COALESCE(sum(total_minor) FILTER(WHERE fulfilment_status<>\'CANCELLED\'),0)::text AS order_value_minor FROM orders WHERE tenant_id=$1',[auth.tenantId]),
