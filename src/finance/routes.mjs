@@ -3,7 +3,7 @@ const validId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const minor=v=>{const n=typeof v==='string'?v:String(v);return /^\d+$/.test(n)&&BigInt(n)<=BigInt(Number.MAX_SAFE_INTEGER)?BigInt(n):null;};
 
 export async function handleRazorpayWebhook(ctx){
- const {req,res,cid,path,method,db,transaction,send,fail,rawBody}=ctx;
+ const {req,res,cid,path,method,transaction,send,fail,rawBody}=ctx;
  if(path!=='/api/v1/webhooks/razorpay'||method!=='POST')return false;
  const secret=process.env.RAZORPAY_WEBHOOK_SECRET;
  if(!secret)fail(503,'PAYMENT_WEBHOOK_NOT_CONFIGURED','Payment webhook is not configured yet.');
@@ -14,34 +14,38 @@ export async function handleRazorpayWebhook(ctx){
  if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected))fail(401,'PAYMENT_WEBHOOK_SIGNATURE_INVALID','Payment provider signature could not be verified.');
  let payload;try{payload=JSON.parse(raw.toString('utf8'))}catch{fail(400,'PAYMENT_WEBHOOK_INVALID_JSON','Payment provider payload is invalid.')}
  const eventId=String(req.headers['x-razorpay-event-id']||createHash('sha256').update(raw).digest('hex'));
- const eventType=String(payload.event||'');
- const payment=payload.payload?.payment?.entity;
- const providerOrderId=payment?.order_id;
+ const eventType=String(payload.event||''),payment=payload.payload?.payment?.entity,providerOrderId=payment?.order_id;
  if(!['payment.captured','payment.failed'].includes(eventType)||typeof providerOrderId!=='string'||typeof payment?.id!=='string')return send(res,200,{received:true,ignored:true,eventType},cid),true;
+ const safePayload={event:eventType,payment:{id:payment.id,order_id:providerOrderId,amount:payment.amount??null,currency:payment.currency??null,status:payment.status??null}};
  const result=await transaction(async client=>{
   const intent=await client.query("SELECT * FROM payment_intents WHERE provider='RAZORPAY' AND provider_order_id=$1 FOR UPDATE",[providerOrderId]);
   if(!intent.rowCount)fail(404,'PAYMENT_INTENT_NOT_FOUND','No Kirani payment intent matches this provider order.');
   const row=intent.rows[0];
-  const event=await client.query("INSERT INTO payment_gateway_events(tenant_id,provider,event_id,event_type,payload,signature_verified) VALUES($1,'RAZORPAY',$2,$3,$4,true) ON CONFLICT(provider,event_id) DO NOTHING RETURNING id",[row.tenant_id,eventId,eventType,payload]);
+  const event=await client.query("INSERT INTO payment_gateway_events(tenant_id,provider,event_id,event_type,payload,signature_verified) VALUES($1,'RAZORPAY',$2,$3,$4,true) ON CONFLICT(provider,event_id) DO NOTHING RETURNING id",[row.tenant_id,eventId,eventType,safePayload]);
   if(!event.rowCount)return {received:true,replayed:true,status:row.status};
+  const eventRow=event.rows[0].id;
+  const markIgnored=async reason=>{await client.query('UPDATE payment_gateway_events SET processed_at=now(),processing_error=$1 WHERE id=$2',[reason,eventRow]);return {received:true,ignored:true,status:row.status,reason};};
   const locked=await client.query('SELECT * FROM orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[row.order_id,row.tenant_id]);
   if(!locked.rowCount)fail(404,'ORDER_NOT_FOUND','Payment intent order no longer exists.');
   if(eventType==='payment.failed'){
    if(row.status!=='PAID')await client.query("UPDATE payment_intents SET status='FAILED',updated_at=now() WHERE id=$1",[row.id]);
-   await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[event.rows[0].id]);
+   await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[eventRow]);
    return {received:true,replayed:false,status:row.status==='PAID'?'PAID':'FAILED'};
   }
-  if(!/^\d+$/.test(String(payment.amount??''))||BigInt(payment.amount)<=0n||String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))fail(409,'PAYMENT_AMOUNT_MISMATCH','Captured payment amount or currency does not match the Kirani payment intent.');
+  if(!/^\\d+$/.test(String(payment.amount??''))||BigInt(payment.amount)<=0n||String(payment.currency||'').toUpperCase()!==String(row.currency).trim()||BigInt(payment.amount)!==BigInt(row.amount_minor))return markIgnored('Captured amount or currency does not match the payment intent.');
+  if(row.status==='PAID'&&row.provider_payment_id!==payment.id)return markIgnored('This payment intent already has a different captured payment.');
   const existing=await client.query("SELECT id FROM payment_transactions WHERE tenant_id=$1 AND provider='RAZORPAY' AND provider_payment_id=$2",[row.tenant_id,payment.id]);
   if(!existing.rowCount){
+   const captured=await client.query("SELECT COALESCE(sum(amount_minor),0)::text AS amount FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE'",[row.tenant_id,row.order_id]);
+   if(BigInt(captured.rows[0].amount)+BigInt(payment.amount)>BigInt(locked.rows[0].total_minor))return markIgnored('Capture exceeds the remaining order balance; manual reconciliation is required.');
    const tx=await client.query("INSERT INTO payment_transactions(tenant_id,order_id,method,external_reference,amount_minor,currency,status,recorded_by,provider,provider_order_id,provider_payment_id) VALUES($1,$2,'CARD_EXTERNAL',$3,$4,$5,'CAPTURED',NULL,'RAZORPAY',$6,$7) RETURNING id",[row.tenant_id,row.order_id,'razorpay:'+payment.id,String(payment.amount),payment.currency,providerOrderId,payment.id]);
    await client.query("INSERT INTO payment_ledger(tenant_id,order_id,payment_transaction_id,entry_type,amount_minor,external_reference,reason,actor_id,correlation_id) VALUES($1,$2,$3,'CAPTURE',$4,$5,'Verified Razorpay capture webhook',NULL,$6)",[row.tenant_id,row.order_id,tx.rows[0].id,String(payment.amount),'razorpay:'+payment.id,cid]);
   }
   const captured=await client.query("SELECT COALESCE(sum(amount_minor),0)::text AS amount FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE'",[row.tenant_id,row.order_id]);
   const next=BigInt(captured.rows[0].amount)>=BigInt(locked.rows[0].total_minor)?'PAID':'PARTIALLY_PAID';
   await client.query('UPDATE orders SET payment_status=$1,updated_at=now(),version=version+1 WHERE id=$2 AND tenant_id=$3',[next,row.order_id,row.tenant_id]);
-  await client.query("UPDATE payment_intents SET status='PAID',updated_at=now() WHERE id=$1",[row.id]);
-  await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[event.rows[0].id]);
+  await client.query("UPDATE payment_intents SET status='PAID',provider_payment_id=$1,updated_at=now() WHERE id=$2",[payment.id,row.id]);
+  await client.query('UPDATE payment_gateway_events SET processed_at=now() WHERE id=$1',[eventRow]);
   return {received:true,replayed:false,status:'PAID',paymentStatus:next};
  });
  return send(res,200,result,cid),true;
