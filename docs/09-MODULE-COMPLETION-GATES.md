@@ -100,7 +100,7 @@ Snapshot after the customer ordering and farmer procurement implementation commi
 | Procurement purchase orders | 85% | 80% | 83% | Admin PO issue, farmer accept/reject, partial accepted quantity and allocation release |
 | Goods receipt and quality | 90% | 85% | 90% | GRN posting, partial receipts, accepted/rejected split, reason capture, lot creation and over-receipt protection; UAT excluded |
 | Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
-| Inventory management and lot control | 82% | 80% | 88% | Tenant-scoped lot register/summary, on-hand/reserved/available balances, audited stock ledger, count adjustments, FEFO lot reservation, idempotent reservation replay, release, quality quarantine/release/recall and admin controls; location transfers, reservation consumption, full ledger reconciliation and recall impact workflow remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
+| Inventory management and lot control | 90% | 88% | 92% | Tenant-scoped lot register/summary, on-hand/reserved/available balances, receipt/opening/adjustment/reserve/release/consume/transfer/quality ledger events, FEFO reservation, whole-lot location transfers, reservation consumption and admin controls; partial transfers, immutable-ledger enforcement, expiry/reconciliation and recall impact workflow remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
 | Delivery slots and proof of delivery | 10% | 0% | 0% | Delivery date selection only; slot capacity and dispatch remain |
 | Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
 | Farmer payables and settlement | 0% | 0% | 0% | Not started |
@@ -120,11 +120,12 @@ Implemented on `feat/phase-1-foundation`:
 - Explicit on-hand, reserved and available balances with a database consistency constraint.
 - Audited positive/negative stock adjustments with protection against reducing on-hand below reserved stock.
 - FEFO reservation allocation across oldest eligible lots, transactional row locks and idempotent replay.
-- Reservation register and reason-required release workflow.
+- Reservation register, reason-required release and explicit consumption/issue workflow.
+- Tenant-specific warehouse locations, automatic main-warehouse provisioning and audited whole-lot transfers.
 - Lot quality transitions for available, quarantined and recalled stock; held/recalled lots are excluded from available-stock summaries, and lots with active reservations cannot be held or recalled.
 - Admin workspace for stock adjustment, reservation, release, lot quality actions and ledger review.
 - PostgreSQL integration coverage for reservation replay, balance changes, release, invalid negative adjustment, quality hold/release, ledger events and role denial.
 
-Latest verified CI: [Kirani CI run 44985811780](https://github.com/varadatechworks/kirani/actions/runs/44985811780) — migration and `npm run check` succeeded. UAT has not been performed.
+Latest verified inventory CI: [Kirani CI run 44986172913](https://github.com/varadatechworks/kirani/actions/runs/44986172913) — migrations and `npm run check` succeeded. UAT has not been performed.
 
-Remaining inventory work before 98%: location lifecycle and transfers, reservation consumption/issue, reservation expiry and reconciliation, recall impact/trace-back workflow, deeper concurrent-write and tenant-isolation tests, and browser-level verification of the admin controls.
+Remaining inventory work before 98%: partial-lot transfers, immutable-ledger enforcement, reservation expiry and automated expiry release, stock-vs-ledger reconciliation, recall impact/trace-back workflow, deeper concurrent-write and tenant-isolation tests, and browser-level verification of the admin controls.
