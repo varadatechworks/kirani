@@ -2,7 +2,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS notification_email_outbox(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  tenant_id uuid NOT NULL REFERENCES tenants(id),
- notification_id uuid NOT NULL REFERENCES app_notifications(id),
+ notification_id uuid REFERENCES app_notifications(id),
  user_id uuid NOT NULL REFERENCES users(id),
  recipient_email text NOT NULL CHECK(length(trim(recipient_email)) BETWEEN 3 AND 320),
  subject text NOT NULL CHECK(length(trim(subject)) BETWEEN 2 AND 140),
