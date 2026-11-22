@@ -53,6 +53,7 @@ export async function handleOrderRoutes(ctx){
   if(typeof key!=='string'||key.length<8||key.length>128)fail(422,'IDEMPOTENCY_KEY_REQUIRED','Submit a unique Idempotency-Key header between 8 and 128 characters.');
   if(!uuid.test(b.cycleId)||!uuid.test(b.addressId)||typeof b.deliveryDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.deliveryDate))fail(422,'ORDER_VALIDATION','Choose a cycle, delivery address and valid delivery date.');
   const created=await transaction(async c=>{
+   await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[auth.tenantId+':'+auth.userId+':'+key]);
    const prior=await c.query('SELECT * FROM orders WHERE tenant_id=$1 AND customer_id=$2 AND idempotency_key=$3',[auth.tenantId,auth.userId,key]);if(prior.rowCount)return {order:prior.rows[0],replayed:true};
    const cycle=await c.query("SELECT *,delivery_from::text AS delivery_from_text,delivery_to::text AS delivery_to_text FROM grocery_cycles WHERE id=$1 AND tenant_id=$2 AND status='OPEN' AND cutoff_at>now() FOR UPDATE",[b.cycleId,auth.tenantId]);if(!cycle.rowCount)fail(409,'CYCLE_CLOSED','This cycle is no longer accepting orders.');
    const d=b.deliveryDate;if(d<cycle.rows[0].delivery_from_text||d>cycle.rows[0].delivery_to_text)fail(422,'DELIVERY_DATE_INVALID','Choose a delivery date within this cycle.');
