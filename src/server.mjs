@@ -164,7 +164,7 @@ async function route(req,res,cid){
 
   if(await handleOrderRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handleFarmerProcurementRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
-  if(await handleGoodsReceiptRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
+  if(await handleGoodsReceiptRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
