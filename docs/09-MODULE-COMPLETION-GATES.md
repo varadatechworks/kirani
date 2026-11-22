@@ -98,9 +98,9 @@ Snapshot after the customer ordering and farmer procurement implementation commi
 | Farmer profile and verification | 90% | 85% | 88% | Profile submission, admin review and farmer-facing status |
 | Farmer seasonal listings | 85% | 75% | 80% | Submission, approval/rejection and audit; availability expiry and edit/withdraw UX remain |
 | Procurement purchase orders | 85% | 80% | 83% | Admin PO issue, farmer accept/reject, partial accepted quantity and allocation release |
-| Goods receipt and quality | 0% | 0% | 0% | Next implementation milestone |
+| Goods receipt and quality | 90% | 85% | 90% | GRN posting, partial receipts, accepted/rejected split, reason capture, lot creation and over-receipt protection; UAT excluded |
 | Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
-| Inventory, packaging and QR traceability | 0% | 0% | 0% | Not started |
+| Inventory lot visibility | 65% | 75% | 70% | Tenant-scoped lot register and per-product available stock summary; reservations, movements, adjustments, FEFO and recall controls remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
 | Delivery slots and proof of delivery | 10% | 0% | 0% | Delivery date selection only; slot capacity and dispatch remain |
 | Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
 | Farmer payables and settlement | 0% | 0% | 0% | Not started |
