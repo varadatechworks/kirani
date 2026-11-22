@@ -13,7 +13,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const secret=process.env.AUTH_JWT_SECRET||'ci-kirani-integration-secret-at-least-32-bytes';
   const issuer=process.env.AUTH_ISSUER||'https://identity.kirani.test/';
   const audience=process.env.AUTH_AUDIENCE||'kirani-api';
-  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience,API_RATE_LIMIT_PER_MINUTE:'1000'},stdio:'ignore'});
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience,API_RATE_LIMIT_PER_MINUTE:'1000',RAZORPAY_WEBHOOK_SECRET:'ci-razorpay-webhook-secret'},stdio:'ignore'});
   t.after(async()=>{child.kill('SIGTERM');await Promise.race([once(child,'exit'),delay(3000)]);await pool.end();});
   const tenant=(await pool.query('INSERT INTO tenants(name) VALUES($1) RETURNING id',['CI Kirani '+randomUUID()])).rows[0].id;
   const roleIds={};
@@ -305,6 +305,18 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(redemptionReplay.status,200);assert.equal(redemptionReplay.data.replayed,true);
   const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:String(BigInt(secondOrder.data.totalMinor)-500n),reason:'CI second order payment'})});
   assert.equal(secondPayment.status,200);
+  const gatewayOrderId='order_ci_'+randomUUID().replaceAll('-','');
+  await pool.query("INSERT INTO payment_intents(tenant_id,order_id,provider,provider_order_id,amount_minor,currency,status,created_by) VALUES($1,$2,'RAZORPAY',$3,500,'INR','OPEN',$4)",[tenant,secondOrder.data.id,gatewayOrderId,userIds.customer]);
+  const gatewayEventId='evt_'+randomUUID().replaceAll('-','');
+  const gatewayPayload={event:'payment.captured',payload:{payment:{entity:{id:'pay_'+randomUUID().replaceAll('-',''),order_id:gatewayOrderId,amount:500,currency:'INR'}}}};
+  const gatewayBody=JSON.stringify(gatewayPayload);
+  const gatewaySignature=createHmac('sha256','ci-razorpay-webhook-secret').update(gatewayBody).digest('hex');
+  const gatewayWebhook=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
+  assert.equal(gatewayWebhook.status,200);const gatewayResult=(await gatewayWebhook.json()).data;assert.equal(gatewayResult.paymentStatus,'PAID');
+  const gatewayReplay=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
+  assert.equal(gatewayReplay.status,200);assert.equal((await gatewayReplay.json()).data.replayed,true);
+  const badGateway=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':'00','x-razorpay-event-id':'evt_bad'},body:gatewayBody});
+  assert.equal(badGateway.status,401);
   const refundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:100,reason:'Customer requested a partial refund for test'})});
   assert.equal(refundRequest.status,200);assert.equal(refundRequest.data.status,'REQUESTED');
   const refundDecision=await call('admin','/admin/refunds/'+refundRequest.data.id+'/decision',{method:'POST',body:JSON.stringify({decision:'APPROVE',reason:'Refund evidence verified'})});
