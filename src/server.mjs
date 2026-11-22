@@ -61,7 +61,7 @@ async function route(req,res,cid){
   if(method==='GET'&&(path==='/'||path==='/index.html'||path==='/manifest.webmanifest')){
     const file=path==='/manifest.webmanifest'?'manifest.webmanifest':'index.html';
     const content=await readFile(resolve(root,file));
-    res.writeHead(200,{'content-type':types[extname(file)],'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});return res.end(content);
+    res.writeHead(200,{'content-type':types[extname(file)],'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; connect-src 'self' https://api.razorpay.com https://checkout.razorpay.com; frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com; img-src 'self' data: https://checkout.razorpay.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});return res.end(content);
   }
   if(!path.startsWith('/api/v1/'))fail(404,'NOT_FOUND','That page is not available.');
   const publicDb=requireDb();if(await handlePublicTrace({req,res,cid,path,method,db:publicDb,send,fail}))return;if(await handleRazorpayWebhook({req,res,cid,path,method,db:publicDb,transaction,send,fail,rawBody}))return;
