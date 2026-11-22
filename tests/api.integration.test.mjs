@@ -87,6 +87,9 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(supportDecision.status,200);assert.equal(supportDecision.data.status,'RESOLVED');
   const report=await call('admin','/admin/reports/operations');
   assert.equal(report.status,200);assert.ok(report.data.orders);assert.ok(report.data.inventory);
+  const financeReport=await call('admin','/admin/reports/finance');assert.equal(financeReport.status,200);assert.ok(financeReport.data.payments);assert.ok(financeReport.data.farmerPayables);
+  const traceReport=await call('admin','/admin/reports/traceability');assert.equal(traceReport.status,200);assert.ok(traceReport.data.inventoryLots);assert.ok(traceReport.data.packages);
+
 
 
   const product=await call('admin','/admin/catalogue/products',{method:'POST',body:JSON.stringify({sku:'CI-'+randomUUID(),name:'Integration Rice',category:'Grains',baseUnit:'KG',priceMinor:8500,currency:'INR'})});
