@@ -1,4 +1,4 @@
-const milli=v=>{const s=String(v);if(!/^-?\\d+(?:\\.\\d{1,3})?$/.test(s))return null;const negative=s.startsWith('-');const [w,f='']=s.replace(/^-/,'').split('.');const n=BigInt(w)*1000n+BigInt((f+'000').slice(0,3));return negative?-n:n;};
+const milli=v=>{const s=String(v);if(!/^-?\d+(?:\.\d{1,3})?$/.test(s))return null;const negative=s.startsWith('-');const [w,f='']=s.replace(/^-/,'').split('.');const n=BigInt(w)*1000n+BigInt((f+'000').slice(0,3));return negative?-n:n;};
 const qty=v=>Number(v)/1000;
 const validId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function handleInventoryRoutes(ctx){
@@ -52,7 +52,7 @@ export async function handleInventoryRoutes(ctx){
   });
   return send(res,result,cid),true;
  }
- const release=path.match(/^\\/api\\/v1\\/admin\\/inventory\\/reservations\\/([0-9a-f-]+)\\/release$/i);
+ const release=path.match(/^\/api\/v1\/admin\/inventory\/reservations\/([0-9a-f-]+)\/release$/i);
  if(method==='POST'&&release){
   if(!validId.test(release[1]))fail(404,'INVENTORY_RESERVATION_NOT_FOUND','Reservation was not found.');
   const b=await bodyJson(req);if(typeof b.reason!=='string'||b.reason.trim().length<5)fail(422,'INVENTORY_RELEASE_REASON_REQUIRED','Provide a reason for releasing reserved stock.');
@@ -64,7 +64,7 @@ export async function handleInventoryRoutes(ctx){
   });
   return send(res,result,cid),true;
  }
- const quality=path.match(/^\\/api\\/v1\\/admin\\/inventory\\/lots\\/([0-9a-f-]+)\\/quality$/i);
+ const quality=path.match(/^\/api\/v1\/admin\/inventory\/lots\/([0-9a-f-]+)\/quality$/i);
  if(method==='POST'&&quality){
   if(!validId.test(quality[1]))fail(404,'INVENTORY_LOT_NOT_FOUND','Inventory lot was not found.');
   const b=await bodyJson(req);if(!['QUARANTINED','AVAILABLE','RECALLED'].includes(b.status)||typeof b.reason!=='string'||b.reason.trim().length<5)fail(422,'INVENTORY_QUALITY_DECISION_INVALID','Choose a valid lot status and provide a reason.');
