@@ -1,4 +1,5 @@
 import { runInventoryExpirySweep } from '../src/workers/maintenance.mjs';
+import { runNotificationEmailSweep } from '../src/workers/notifications.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -70,8 +71,12 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const overlappingPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:3,pointValuePaise:100})});
   assert.equal(overlappingPolicy.status,409);assert.equal(overlappingPolicy.error.code,'LOYALTY_POLICY_DATE_OVERLAP');
 
+  const emailPreference=await call('customer','/customers/me/notifications/preferences',{method:'PUT',body:JSON.stringify({preferences:[{category:'SYSTEM',inAppEnabled:true,emailEnabled:true,smsEnabled:false}]})});assert.equal(emailPreference.status,200);
   const notification=await call('admin','/admin/notifications',{method:'POST',body:JSON.stringify({category:'SYSTEM',title:'Kirani test notice',body:'Notification inbox integration test',roles:['customer']})});
-  assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,2);
+  assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,2);assert.equal(notification.data.queuedEmailCount,1);
+  const deliveryQueue=await call('admin','/admin/notifications/delivery');assert.equal(deliveryQueue.status,200);assert.ok(deliveryQueue.data.some(x=>x.subject==='Kirani test notice'&&x.status==='PENDING'));
+  const deliveryConfig=await call('admin','/admin/notifications/config');assert.equal(deliveryConfig.status,200);assert.equal(deliveryConfig.data.emailDeliveryConfigured,false);
+  const skippedEmailWorker=await runNotificationEmailSweep(pool,{apiKey:'',from:''});assert.equal(skippedEmailWorker.skipped,true);
   const inbox=await call('customer','/customers/me/notifications');
   assert.equal(inbox.status,200);assert.ok(inbox.data.some(x=>x.title==='Kirani test notice'));
   const notice=inbox.data.find(x=>x.title==='Kirani test notice');
