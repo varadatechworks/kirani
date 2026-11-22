@@ -53,7 +53,7 @@ All authenticated API routes are under `/api/v1`. Send `Authorization: Bearer <a
 | Delivery | `POST /admin/delivery/slots`, `POST /admin/delivery/assignments`, `GET /delivery/assignments`, `POST /delivery/assignments/:id/pod` |
 | Payments/refunds | `POST /admin/orders/:id/payments/record`, `GET /customers/me/orders/:id/payments`, `POST /customers/me/refund-requests`, `POST /admin/refunds/:id/decision`, `POST /admin/refunds/:id/record-processed` |
 | Farmer settlements | `GET /admin/farmer-payables`, `POST /admin/farmer-settlements`, `POST /admin/farmer-settlements/:id/approve`, `POST /admin/farmer-settlements/:id/record-paid`, `GET /farmers/me/settlements` |
-| Loyalty | `GET|POST /admin/loyalty/policies`, `GET /customers/me/loyalty`, `POST /customers/me/loyalty/redeem`, `POST /admin/loyalty/orders/:id/earn`, `POST /admin/loyalty/expire` |
+| Loyalty | `GET|POST /admin/loyalty/policies`, `GET /customers/me/loyalty`, `POST /customers/me/loyalty/redeem`, `POST /admin/loyalty/orders/:id/earn`, `POST /admin/loyalty/expire`, `GET /customers/me/referral-code`, `POST /customers/me/referrals/accept`, `POST /admin/loyalty/referrals/:id/reward` |
 | Notifications/support/reports | `GET /customers/me/notifications`, `POST /admin/notifications`, `POST /customers/me/support`, `GET /admin/support`, `GET /admin/reports/operations` |
 
 ## Verification
