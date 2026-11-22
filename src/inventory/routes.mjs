@@ -106,6 +106,7 @@ export async function handleInventoryRoutes(ctx){
    const source=await c.query('SELECT * FROM inventory_lots WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[b.sourceLotId,auth.tenantId]);if(!source.rowCount)fail(404,'INVENTORY_LOT_NOT_FOUND','Source inventory lot was not found.');
    const affected=await c.query(`WITH RECURSIVE outputs(output_id) AS (
     SELECT output_id FROM processing_output_genealogy WHERE tenant_id=$1 AND source_lot_id=$2
+    UNION SELECT output_id FROM processing_output_genealogy WHERE tenant_id=$1 AND parent_output_id=(SELECT processing_output_id FROM inventory_lots WHERE id=$2 AND tenant_id=$1)
     UNION SELECT g.output_id FROM processing_output_genealogy g JOIN outputs p ON g.parent_output_id=p.output_id WHERE g.tenant_id=$1
    ) SELECT id FROM inventory_lots WHERE tenant_id=$1 AND (id=$2 OR processing_output_id IN(SELECT output_id FROM outputs)) FOR UPDATE`,[auth.tenantId,b.sourceLotId]);
    const lotIds=affected.rows.map(x=>x.id);const recall=await c.query('INSERT INTO inventory_recalls(tenant_id,recall_number,source_lot_id,reason,created_by) VALUES($1,$2,$3,$4,$5) RETURNING *',[auth.tenantId,b.recallNumber.trim(),b.sourceLotId,b.reason.trim(),auth.userId]);
