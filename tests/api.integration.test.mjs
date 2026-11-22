@@ -13,7 +13,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const secret=process.env.AUTH_JWT_SECRET||'ci-kirani-integration-secret-at-least-32-bytes';
   const issuer=process.env.AUTH_ISSUER||'https://identity.kirani.test/';
   const audience=process.env.AUTH_AUDIENCE||'kirani-api';
-  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience},stdio:'ignore'});
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience,API_RATE_LIMIT_PER_MINUTE:'1000'},stdio:'ignore'});
   t.after(async()=>{child.kill('SIGTERM');await Promise.race([once(child,'exit'),delay(3000)]);await pool.end();});
   const tenant=(await pool.query('INSERT INTO tenants(name) VALUES($1) RETURNING id',['CI Kirani '+randomUUID()])).rows[0].id;
   const roleIds={};
