@@ -170,8 +170,15 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(replay.status,200);assert.equal(replay.data.id,order.data.id);assert.equal(replay.data.idempotentReplay,true);
   const orderDetail=await call('customer','/orders/'+order.data.id);
   assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
+  const packable=(await pool.query("SELECT il.id,il.quantity_available::text AS q FROM inventory_lots il JOIN processing_outputs po ON po.id=il.processing_output_id WHERE il.tenant_id=$1 AND po.job_id=$2 AND po.output_type='SALEABLE' AND il.status='AVAILABLE'",[tenant,millJob.data.id])).rows[0];
+  const packed=await call('admin','/admin/packing/packages',{method:'POST',body:JSON.stringify({orderId:order.data.id,packageNumber:'PKG-CI-'+randomUUID(),items:[{orderItemId:orderDetail.data.items[0].id,quantity:.4,allocations:[{lotId:packable.id,quantity:.4}]}]})});
+  assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
+  const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
+  const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
+
+  assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
   const cancelled=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Customer requested cancellation'})});
-  assert.equal(cancelled.status,200);assert.equal(cancelled.data.fulfilmentStatus,'CANCELLED');
+  assert.equal(cancelled.status,409);assert.equal(cancelled.error.code,'ORDER_ALREADY_PACKED');
   const secondCancel=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Duplicate cancellation attempt'})});
   assert.equal(secondCancel.status,409);
   const adminAddressAccess=await call('admin','/customers/me/addresses');
