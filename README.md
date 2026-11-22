@@ -29,7 +29,7 @@ Kirani is a traceable grocery sourcing, procurement, processing and fulfilment p
 
 Requires Node.js 20.6+ and PostgreSQL 15+.
 
-1. Copy `.env.example` to `.env`. Configure `DATABASE_URL`, `AUTH_JWT_SECRET` (at least 32 random bytes), `AUTH_ISSUER` and `AUTH_AUDIENCE`.
+1. Copy `.env.example` to `.env`. Configure `DATABASE_URL`, `AUTH_JWT_SECRET` (at least 32 random bytes), `AUTH_ISSUER` and `AUTH_AUDIENCE`. Optional controls: `API_RATE_LIMIT_PER_MINUTE`, `API_RATE_WINDOW_MS`, and `TRUST_PROXY=true` only when deployed behind a trusted proxy.
 2. Install: `npm install`.
 3. Apply migrations: `node --env-file=.env src/db/migrate.mjs`.
 4. Create a tenant/admin identity: `node --env-file=.env scripts/bootstrap-tenant.mjs`. This creates database identities and roles; it does not issue credentials.
@@ -65,4 +65,4 @@ All authenticated API routes are under `/api/v1`. Send `Authorization: Bearer <a
 
 ## Production readiness still required
 
-Configure a managed identity provider/MFA and secret store; provider credentials and signed webhooks; email/SMS/WhatsApp; bank payout; TLS/CORS/CSRF/rate limiting; backup and restore drills; monitoring/alerts; load and security testing; PII retention/redaction; Kannada/accessibility QA; mobile device testing; and formal UAT/business sign-off. Do not treat manual reconciliation endpoints as gateway or bank integrations.
+Configure a managed identity provider/MFA and secret store; provider credentials and signed webhooks; email/SMS/WhatsApp; bank payout; distributed gateway/WAF rate limiting for multi-instance deployments; backup and restore drills; monitoring/alerts; load and security testing; PII retention/redaction; Kannada/accessibility QA; mobile device testing; and formal UAT/business sign-off. Do not treat manual reconciliation endpoints as gateway or bank integrations.
