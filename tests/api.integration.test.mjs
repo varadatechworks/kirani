@@ -175,6 +175,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
   const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
+  const recall=await call('admin','/admin/inventory/recalls',{method:'POST',body:JSON.stringify({recallNumber:'RECALL-CI-'+randomUUID(),sourceLotId:sourceForMill.id,reason:'CI source contamination recall exercise'})});
+  assert.equal(recall.status,200);assert.equal(recall.data.status,'OPEN');assert.equal(recall.data.affectedPackages,1);assert.ok(recall.data.affectedLots>=3);
+  const recallRegister=await call('admin','/admin/inventory/recalls');assert.equal(recallRegister.status,200);assert.ok(recallRegister.data.some(x=>x.id===recall.data.id));
+  const recalledTrace=await fetch(base+packed.data.tracePath);const recalledPayload=await recalledTrace.json();assert.equal(recalledPayload.data.status,'RECALLED');
+  const recallClosed=await call('admin','/admin/inventory/recalls/'+recall.data.id+'/close',{method:'POST',body:JSON.stringify({reason:'CI recall investigation closed after trace validation'})});
+  assert.equal(recallClosed.status,200);assert.equal(recallClosed.data.status,'CLOSED');
+
 
   assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
   const cancelled=await call('customer','/orders/'+order.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Customer requested cancellation'})});
