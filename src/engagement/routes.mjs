@@ -43,7 +43,7 @@ export async function handleEngagementRoutes(ctx){
     created++;
    }
    await audit(client,auth,cid,'notification.broadcast_created','app_notification',b.resourceId??'',{category:b.category,recipientCount:created,queuedEmailCount:queuedEmails});
-   return {recipientCount:created,inAppRecipients:inAppCreated,queuedEmailCount:queuedEmails,channels:['IN_APP',...(queuedEmails?['EMAIL']:[])]};
+   return {recipientCount:created,inAppRecipients:inAppCreated,queuedEmailCount:queuedEmails,channels:[...(inAppCreated?['IN_APP']:[]),...(queuedEmails?['EMAIL']:[])]};
   });
   return send(res,result,cid),true;
  }
