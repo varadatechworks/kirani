@@ -118,7 +118,7 @@ export async function handleInventoryRoutes(ctx){
    return {id:recall.rows[0].id,recallNumber:recall.rows[0].recall_number,status:'OPEN',affectedLots:lotIds.length,affectedPackages:packages.rowCount,replayed:false};
   });return send(res,result,cid),true;
  }
- const recallClose=path.match(/^\\/api\\/v1\\/admin\\/inventory\\/recalls\\/([0-9a-f-]+)\\/close$/i);
+ const recallClose=path.match(/^\/api\/v1\/admin\/inventory\/recalls\/([0-9a-f-]+)\/close$/i);
  if(method==='POST'&&recallClose){if(!validId.test(recallClose[1]))fail(404,'INVENTORY_RECALL_NOT_FOUND','Recall case was not found.');const b=await bodyJson(req);if(typeof b.reason!=='string'||b.reason.trim().length<5)fail(422,'INVENTORY_RECALL_CLOSE_REASON_REQUIRED','Provide a recall closure and disposition reason.');const result=await transaction(async c=>{const q=await c.query('UPDATE inventory_recalls SET status=\'CLOSED\',closed_by=$1,closed_at=now(),close_reason=$2 WHERE id=$3 AND tenant_id=$4 AND status=\'OPEN\' RETURNING *',[auth.userId,b.reason.trim(),recallClose[1],auth.tenantId]);if(!q.rowCount)fail(409,'INVENTORY_RECALL_NOT_OPEN','Recall is missing or already closed.');await audit(c,auth,cid,'inventory.recall_closed','inventory_recall',recallClose[1],{reason:b.reason.trim()});return {id:recallClose[1],status:'CLOSED',closeReason:b.reason.trim()};});return send(res,result,cid),true;}
  const quality=path.match(/^\/api\/v1\/admin\/inventory\/lots\/([0-9a-f-]+)\/quality$/i);
  if(method==='POST'&&quality){
