@@ -78,34 +78,33 @@ Status values: **Not started**, **In progress**, **Code complete**, **UAT verifi
 
 ## Development progress snapshot (UAT excluded)
 
-Snapshot after the customer ordering and farmer procurement implementation commits. These are engineering estimates based on code, automated integration coverage and frontend wiring; they do **not** include UAT sign-off.
+Updated after inventory, processing, traceability, delivery, loyalty, engagement and finance implementation. Percentages are engineering estimates based on persisted backend workflows, role-aware UI wiring and automated PostgreSQL integration coverage. They exclude UAT and live provider verification.
 
-| Module | Backend | Frontend | Integration | Development notes |
+| Module | Backend | Frontend | Integration | Remaining development gates |
 |---|---:|---:|---:|---|
-| Tenant isolation and role enforcement | 80% | 50% | 65% | Tenant-scoped API and role checks; full permission matrix and onboarding UX remain |
-| Customer addresses | 95% | 90% | 92% | CRUD, default address, validation and tenant/customer ownership tests |
-| Catalogue | 80% | 75% | 78% | Tenant catalogue, pricing and customer display; effective-dated price/tax rules remain |
-| Monthly cycles | 80% | 70% | 75% | Create/open/close and customer cycle read; full schedule and cutoff UX remains |
-| Recurring basket | 80% | 75% | 78% | Versioned basket and product availability checks; one-time basket and substitutions remain |
-| Order preview and placement | 90% | 85% | 88% | Server-side totals, address snapshot, idempotency and order history |
-| Order cancellation and detail | 85% | 80% | 83% | Customer-owned unpaid placed orders can be cancelled with reason; policy-driven paid/partial cancellation remains |
-| Farmer profile and verification | 90% | 85% | 88% | Profile submission, admin review and farmer-facing status |
-| Farmer seasonal listings | 85% | 75% | 80% | Submission, approval/rejection and audit; availability expiry and edit/withdraw UX remain |
-| Procurement purchase orders | 85% | 80% | 83% | Admin PO issue, farmer accept/reject, partial accepted quantity and allocation release |
-| Goods receipt and quality | 90% | 85% | 90% | GRN posting, partial receipts, accepted/rejected split, reason capture, lot creation and over-receipt protection; UAT excluded |
-| Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
-| Inventory management and lot control | 90% | 88% | 92% | Tenant-scoped lot register/summary, on-hand/reserved/available balances, receipt/opening/adjustment/reserve/release/consume/transfer/quality ledger events, FEFO reservation, whole-lot location transfers, reservation consumption and admin controls; partial transfers, immutable-ledger enforcement, expiry/reconciliation and recall impact workflow remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
-| Delivery slots and proof of delivery | 85% | 80% | 88% | Capacity-controlled date/time slots, operator assignment, GPS route start, item-level delivered/refused quantities, recipient and partial POD, order/package state updates; COD reconciliation, photo/signature evidence, retries, service-area validation and browser E2E remain |
-| Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
-| Farmer payables and settlement | 0% | 0% | 0% | Not started |
-| Loyalty wallet and configurable conversion | 0% | 0% | 0% | Not started |
-| Notifications and support | 0% | 0% | 0% | Not started |
-| Reports and analytics | 20% | 25% | 20% | Dashboard metrics exist; reconciled reporting remains |
-| Production identity, security and operations | 45% | 35% | 40% | JWT/tenant controls, correlation IDs and CI exist; MFA, provider integration, threat review and production operations remain |
-| Native Android and iOS apps | 0% | 0% | 0% | Current mobile experiences are responsive browser previews, not native apps |
+| Identity, tenant and RBAC | 80% | 65% | 70% | External identity provider, MFA/recovery, full role matrix, tenant IDOR suite, session revocation |
+| Customer addresses | 95% | 90% | 92% | Pincode/service-area validation and browser E2E |
+| Catalogue and pricing | 80% | 75% | 78% | Effective-dated price/tax, packs/variants and full search/filter UX |
+| Monthly cycles and recurring basket | 80% | 75% | 78% | One-time basket, cycle timezone/cutoff edge cases, substitutions and version UX |
+| Order preview, placement and lifecycle | 90% | 85% | 88% | Paid/partial cancellation, amendments, serviceability and browser E2E |
+| Farmer onboarding and seasonal listings | 90% | 85% | 88% | Document upload/verification provider, edit/withdraw/expiry UX and payout profile |
+| Procurement planning and purchase orders | 85% | 80% | 83% | Demand aggregation, supplier quotes, PO change/cancel and approval limits |
+| Goods receipt and quality | 90% | 85% | 90% | Weighment evidence, QC checklist configuration and browser E2E |
+| Mill processing and batch genealogy | 90% | 85% | 92% | Rework/correction workflows, multi-source merge approval, operator/equipment evidence and E2E |
+| Inventory, expiry and recall | 95% | 90% | 95% | Concurrent stress/tenant matrix, scheduled expiry worker, recall closure evidence and browser E2E |
+| Packaging and QR traceability | 88% | 80% | 90% | Print-ready label templates, customer trace page polish, token revocation and E2E |
+| Delivery slots and proof of delivery | 88% | 85% | 90% | COD-to-payment reconciliation, photo/signature evidence, failed-delivery reattempts and route E2E |
+| Payments and refunds | 70% | 65% | 75% | Live gateway adapter/webhooks, signature verification, automated refunds, reconciliation reports and provider certification |
+| Farmer payables and settlement | 85% | 80% | 88% | Bank payout integration, tax/fee policy, settlement reversal and statement export |
+| Loyalty wallet and conversion | 85% | 80% | 85% | Refund/reversal clawback, expiry lots, referral policy and deeper effective-date scenarios |
+| Notifications and support | 80% | 75% | 82% | Email/SMS/WhatsApp providers, templates, SLA/escalation, campaigns and delivery receipts |
+| Reports and analytics | 60% | 55% | 65% | Financial reconciliation, drill-down, filters, exports and source-ledger cross-checks |
+| Audit, privacy and production security | 55% | 45% | 50% | Threat modelling, rate limiting, PII retention/redaction, MFA, secrets, penetration testing |
+| Localization and accessibility | 35% | 30% | 25% | Complete Kannada translations, locale coverage, keyboard/screen-reader and accessibility testing |
+| Native Android/iOS applications | 0% | 0% | 0% | Not started; current customer/farmer/operator experiences are responsive web/PWA previews |
+| Deployment and operations | 50% | 30% | 40% | Production hosting/identity/provider setup, backups/restore drill, monitoring, load test and rollback runbook |
 
-**Overall product development is still below 50%.** Inventory, processing and traceability have materially advanced but are not yet at the requested 98% gates. Delivery/POD, payments/refunds, farmer settlements, loyalty, notifications/support, reports, production operations and native apps remain major unfinished areas. A product-wide 95% figure cannot be claimed.
-
+No single product-wide completion percentage is asserted here. The matrix makes the remaining work visible; UAT, production credentials and business/legal approvals remain separate release gates.
 
 ## Inventory control implementation update
 
@@ -120,9 +119,9 @@ Implemented on `feat/phase-1-foundation`:
 - Admin workspace for stock adjustment, reservation, release, lot quality actions and ledger review.
 - PostgreSQL integration coverage for reservation replay, balance changes, release, invalid negative adjustment, quality hold/release, ledger events and role denial.
 
-Latest verified inventory CI: [Kirani CI run 44986172913](https://github.com/varadatechworks/kirani/actions/runs/44986172913) — migrations and `npm run check` succeeded. UAT has not been performed.
+Latest baseline processing/inventory CI: [Kirani CI run 44993154500](https://github.com/varadatechworks/kirani/actions/runs/44993154500) passed before the finance and engagement additions. Finance/engagement changes are undergoing new CI. UAT has not been performed.
 
-Remaining inventory work before 98%: partial-lot transfers, immutable-ledger enforcement, reservation expiry and automated expiry release, stock-vs-ledger reconciliation, recall impact/trace-back workflow, deeper concurrent-write and tenant-isolation tests, and browser-level verification of the admin controls.
+Remaining inventory work before 98%: scheduled execution/monitoring of reservation expiry, stronger concurrent-write and tenant-isolation stress tests, recall case evidence and browser-level end-to-end verification of the admin controls.
 
 
 ## Processing, inventory and traceability implementation update
@@ -153,3 +152,15 @@ Implemented on `feat/phase-1-foundation`:
 - Delivery events, GPS coordinates, POD records and order/package state changes are persisted and audited.
 
 Automated CI covering the delivery slot, assignment, GPS start and partial-POD workflow passed in [Kirani CI run 44992914651](https://github.com/varadatechworks/kirani/actions/runs/44992914651) (16 tests passed). Follow-up inventory reservation/recall hardening is being checked in a newer CI run. UAT has not been performed.
+
+## Finance, loyalty and engagement implementation update
+
+Implemented on `feat/phase-1-foundation`:
+- Manual payment reconciliation records for UPI, bank transfer, external card, COD and cash, with order balance checks and an append-only payment ledger. This records externally completed payments; it does not initiate gateway transactions.
+- Customer refund requests, admin maker-checker approval, and reconciliation after an external refund has actually been completed. Refund amount cannot exceed captured, unrefunded transactions.
+- Farmer payable accrual from quality-accepted GRN quantities at the PO unit price; reason-coded deductions; settlement batch creation; different-admin approval; bank/UTR reference recording; farmer payable and settlement statements.
+- Effective-dated, versioned loyalty conversion policies with point-value snapshots, customer wallet/ledger, delivery-and-payment-gated earning, redemption caps and idempotency.
+- Tenant-scoped in-app notifications, category preferences, admin broadcast by user/role, read receipts, customer support tickets/messages, internal notes, priority/status/assignment, and operations reporting aggregates.
+- Admin finance/loyalty, support and reports workspaces; customer rewards/inbox/support panels; farmer earnings/settlement view.
+
+External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting and loyalty clawback/expiry are not implemented as live provider integrations. Configure credentials and business policies before production.
