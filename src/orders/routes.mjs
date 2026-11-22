@@ -35,14 +35,14 @@ export async function handleOrderRoutes(ctx){
  if(method==='POST'&&path==='/api/v1/customers/me/orders/preview'){
   requireRole(auth,'customer');const b=await bodyJson(req);
   if(!uuid.test(b.cycleId)||!uuid.test(b.addressId)||typeof b.deliveryDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.deliveryDate))fail(422,'ORDER_PREVIEW_VALIDATION','Choose a cycle, delivery address and valid delivery date.');
-  const r=await db.query(`SELECT gc.id AS cycle_id,gc.code,gc.delivery_from,gc.delivery_to,gc.cutoff_at,ca.*,bv.id AS basket_version_id,bi.product_id,bi.quantity::text,p.name AS product_name,p.base_unit,p.price_minor,p.currency
+  const r=await db.query(`SELECT gc.id AS cycle_id,gc.code,gc.delivery_from::text AS delivery_from_text,gc.delivery_to::text AS delivery_to_text,gc.cutoff_at,ca.*,bv.id AS basket_version_id,bi.product_id,bi.quantity::text,p.name AS product_name,p.base_unit,p.price_minor,p.currency
    FROM grocery_cycles gc JOIN customer_addresses ca ON ca.id=$2 AND ca.tenant_id=gc.tenant_id AND ca.customer_id=$3 AND ca.active=true
    JOIN baskets ba ON ba.tenant_id=gc.tenant_id AND ba.customer_id=$3 AND ba.status='ACTIVE'
    JOIN LATERAL(SELECT * FROM basket_versions WHERE basket_id=ba.id ORDER BY version DESC LIMIT 1)bv ON bv.effective_cycle_id=gc.id
    JOIN basket_items bi ON bi.basket_version_id=bv.id JOIN products p ON p.id=bi.product_id AND p.tenant_id=gc.tenant_id AND p.active=true
    WHERE gc.id=$1 AND gc.tenant_id=$4 AND gc.status='OPEN' AND gc.cutoff_at>now() ORDER BY p.name`,[b.cycleId,b.addressId,auth.userId,auth.tenantId]);
   if(!r.rowCount)fail(409,'ORDER_NOT_READY','The selected cycle, address or recurring basket is unavailable. Please review your basket and delivery details.');
-  const first=r.rows[0];if(b.deliveryDate<first.delivery_from.toISOString().slice(0,10)||b.deliveryDate>first.delivery_to.toISOString().slice(0,10))fail(422,'DELIVERY_DATE_INVALID','Choose a delivery date within this cycle.');
+  const first=r.rows[0];if(b.deliveryDate<first.delivery_from_text||b.deliveryDate>first.delivery_to_text)fail(422,'DELIVERY_DATE_INVALID','Choose a delivery date within this cycle.');
   const items=r.rows.map(x=>{const qty=milli(x.quantity);if(qty===null)fail(422,'QUANTITY_INVALID','A basket quantity is invalid.');const line=(BigInt(x.price_minor)*qty+500n)/1000n;return {productId:x.product_id,name:x.product_name,quantity:x.quantity,unitCode:x.base_unit,unitPriceMinor:String(x.price_minor),lineTotalMinor:String(line),currency:String(x.currency).trim()};});
   const currencies=new Set(items.map(x=>x.currency));if(currencies.size!==1)fail(409,'CURRENCY_MISMATCH','The basket contains products with different currencies.');
   const subtotal=items.reduce((sum,x)=>sum+BigInt(x.lineTotalMinor),0n);
@@ -54,8 +54,8 @@ export async function handleOrderRoutes(ctx){
   if(!uuid.test(b.cycleId)||!uuid.test(b.addressId)||typeof b.deliveryDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.deliveryDate))fail(422,'ORDER_VALIDATION','Choose a cycle, delivery address and valid delivery date.');
   const created=await transaction(async c=>{
    const prior=await c.query('SELECT * FROM orders WHERE tenant_id=$1 AND customer_id=$2 AND idempotency_key=$3',[auth.tenantId,auth.userId,key]);if(prior.rowCount)return {order:prior.rows[0],replayed:true};
-   const cycle=await c.query("SELECT * FROM grocery_cycles WHERE id=$1 AND tenant_id=$2 AND status='OPEN' AND cutoff_at>now() FOR UPDATE",[b.cycleId,auth.tenantId]);if(!cycle.rowCount)fail(409,'CYCLE_CLOSED','This cycle is no longer accepting orders.');
-   const d=b.deliveryDate;if(d<cycle.rows[0].delivery_from.toISOString().slice(0,10)||d>cycle.rows[0].delivery_to.toISOString().slice(0,10))fail(422,'DELIVERY_DATE_INVALID','Choose a delivery date within this cycle.');
+   const cycle=await c.query("SELECT *,delivery_from::text AS delivery_from_text,delivery_to::text AS delivery_to_text FROM grocery_cycles WHERE id=$1 AND tenant_id=$2 AND status='OPEN' AND cutoff_at>now() FOR UPDATE",[b.cycleId,auth.tenantId]);if(!cycle.rowCount)fail(409,'CYCLE_CLOSED','This cycle is no longer accepting orders.');
+   const d=b.deliveryDate;if(d<cycle.rows[0].delivery_from_text||d>cycle.rows[0].delivery_to_text)fail(422,'DELIVERY_DATE_INVALID','Choose a delivery date within this cycle.');
    const address=await c.query('SELECT * FROM customer_addresses WHERE id=$1 AND tenant_id=$2 AND customer_id=$3 AND active=true FOR SHARE',[b.addressId,auth.tenantId,auth.userId]);if(!address.rowCount)fail(404,'ADDRESS_NOT_FOUND','Choose an active delivery address.');
    const basket=await c.query("SELECT ba.id AS basket_id,bv.id AS version_id,bv.version,bi.product_id,bi.quantity::text,p.name,p.base_unit,p.price_minor,p.currency FROM baskets ba JOIN LATERAL(SELECT * FROM basket_versions WHERE basket_id=ba.id ORDER BY version DESC LIMIT 1)bv ON bv.effective_cycle_id=$3 JOIN basket_items bi ON bi.basket_version_id=bv.id JOIN products p ON p.id=bi.product_id AND p.tenant_id=ba.tenant_id AND p.active=true WHERE ba.tenant_id=$1 AND ba.customer_id=$2 AND ba.status='ACTIVE' ORDER BY p.name FOR SHARE OF ba",[auth.tenantId,auth.userId,b.cycleId]);if(!basket.rowCount)fail(409,'BASKET_EMPTY','Your recurring basket is empty or not configured for this cycle.');
    const items=basket.rows.map(x=>{const qty=milli(x.quantity);if(qty===null)fail(422,'QUANTITY_INVALID','A basket quantity is invalid.');return {...x,line:(BigInt(x.price_minor)*qty+500n)/1000n};});
