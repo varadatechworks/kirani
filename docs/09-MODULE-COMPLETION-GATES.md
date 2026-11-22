@@ -98,7 +98,7 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 | Farmer payables and settlement | 85% | 80% | 88% | Bank payout integration, tax/fee policy, settlement reversal and statement export |
 | Loyalty wallet and conversion | 92% | 88% | 92% | Effective-dated conversion, immutable point-value snapshots, expiry-aware point lots, FEFO redemption, expiry sweep and one-level direct referrals; refund clawback/debt and deeper effective-date scenarios remain |
 | Notifications and support | 80% | 75% | 82% | Email/SMS/WhatsApp providers, templates, SLA/escalation, campaigns and delivery receipts |
-| Reports and analytics | 60% | 55% | 65% | Financial reconciliation, drill-down, filters, exports and source-ledger cross-checks |
+| Reports and analytics | 75% | 70% | 80% | Operations, finance reconciliation and traceability/quality aggregates; date filters, drill-down, exports, scheduled snapshots and source-ledger cross-checks remain |
 | Audit, privacy and production security | 60% | 50% | 60% | Tenant/role checks, append-only ledgers, correlation/audit events, bounded per-IP API rate limit and security response headers; distributed gateway limits, threat modelling, PII retention/redaction, MFA, secret rotation and penetration testing remain |
 | Localization and accessibility | 35% | 30% | 25% | Complete Kannada translations, locale coverage, keyboard/screen-reader and accessibility testing |
 | Native Android/iOS applications | 0% | 0% | 0% | Not started; current customer/farmer/operator experiences are responsive web/PWA previews |
@@ -160,7 +160,7 @@ Implemented on `feat/phase-1-foundation`:
 - Customer refund requests, admin maker-checker approval, and reconciliation after an external refund has actually been completed. Refund amount cannot exceed captured, unrefunded transactions.
 - Farmer payable accrual from quality-accepted GRN quantities at the PO unit price; reason-coded deductions; settlement batch creation; different-admin approval; bank/UTR reference recording; farmer payable and settlement statements.
 - Effective-dated, versioned loyalty conversion policies with point-value snapshots, customer wallet/ledger, delivery-and-payment-gated earning, redemption caps, expiry-aware point lots, FEFO redemption, expiry sweep, one-level referral codes and qualification rewards, and idempotency.
-- Tenant-scoped in-app notifications, category preferences, admin broadcast by user/role, read receipts, customer support tickets/messages, internal notes, priority/status/assignment, and operations reporting aggregates.
+- Tenant-scoped in-app notifications, category preferences, admin broadcast by user/role, read receipts, customer support tickets/messages, internal notes, priority/status/assignment, plus operations, financial reconciliation and traceability/quality reports.
 - Admin finance/loyalty, support and reports workspaces; customer rewards/inbox/support panels; farmer earnings/settlement view.
 
 External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting, loyalty refund clawback/debt are not yet implemented. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
