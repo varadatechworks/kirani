@@ -59,7 +59,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(poResponse.status,200);assert.equal(poResponse.data.status,'ACCEPTED');
   const allocated=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
   assert.equal(allocated,'8.000');
-  const firstReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-CI-'+randomUUID(),notes:'First partial receipt',items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:7,quantityQualityAccepted:6,quantityRejected:1,rejectionReason:'Moisture above accepted threshold',lotCode:'LOT-CI-'+randomUUID()}]})});
+  const firstReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-CI-'+randomUUID(),notes:'First partial receipt',items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:7,quantityQualityAccepted:6,quantityRejected:1,rejectionReason:'Moisture above accepted threshold',lotCode:'LOT-CI-'+randomUUID(),expiresOn:'2099-12-31',bestBefore:'2099-06-30'}]})});
   assert.equal(firstReceipt.status,200);assert.equal(firstReceipt.data.purchaseOrderStatus,'PARTIALLY_RECEIVED');
   const secondReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-CI-'+randomUUID(),items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:1,quantityQualityAccepted:1,quantityRejected:0,lotCode:'LOT-CI-'+randomUUID()}]})});
   assert.equal(secondReceipt.status,200);assert.equal(secondReceipt.data.purchaseOrderStatus,'RECEIVED');
@@ -73,6 +73,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(inventoryLots.status,200);assert.equal(inventoryLots.data.length,2);
   const inventorySummary=await call('admin','/admin/inventory/summary');
   assert.equal(inventorySummary.status,200);assert.equal(inventorySummary.data[0].availableQuantity,'7.000');
+  assert.equal(inventoryLots.data[1].expiresOn,'2099-12-31');assert.equal(inventoryLots.data[1].bestBefore,'2099-06-30');
   const lotId=inventoryLots.data[0].id;
   const reservationKey='ci-reservation-'+randomUUID();
   const reserveOptions={method:'POST',headers:{'idempotency-key':reservationKey},body:JSON.stringify({referenceType:'MANUAL',referenceId:'CI-CYCLE',items:[{productId:product.data.id,quantity:2}]})};
@@ -107,8 +108,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(locations.status,200);assert.ok(locations.data.some(x=>x.code==='MAIN'));
   const secondary=await call('admin','/admin/inventory/locations',{method:'POST',body:JSON.stringify({code:'CI-MILL',name:'CI Mill Store',locationType:'MILL'})});
   assert.equal(secondary.status,200);
-  const transfer=await call('admin','/admin/inventory/transfers',{method:'POST',body:JSON.stringify({transferNumber:'TRF-CI-'+randomUUID(),lotId,toLocationId:secondary.data.id,reason:'CI full lot transfer test'})});
-  assert.equal(transfer.status,200);assert.equal(transfer.data.status,'COMPLETED');
+  const transfer=await call('admin','/admin/inventory/transfers',{method:'POST',body:JSON.stringify({transferNumber:'TRF-CI-'+randomUUID(),lotId,toLocationId:secondary.data.id,quantity:0.5,reason:'CI partial lot transfer test'})});
+  assert.equal(transfer.status,200);assert.equal(transfer.data.status,'COMPLETED');assert.equal(transfer.data.quantity,0.5);assert.ok(transfer.data.destinationLotCode);
   const transfers=await call('admin','/admin/inventory/transfers');
   assert.equal(transfers.status,200);assert.ok(transfers.data.some(x=>x.id===transfer.data.id));
   const facility=await call('admin','/admin/processing/facilities',{method:'POST',body:JSON.stringify({code:'CI-MILL-'+randomUUID().slice(0,6),name:'CI Test Mill',varianceTolerance:.5})});
@@ -138,6 +139,20 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(inspected.status,200);assert.equal(inspected.data.status,'RECEIVED_AND_INSPECTED');
   const genealogy=await pool.query('SELECT count(*)::int AS n FROM processing_output_genealogy WHERE tenant_id=$1 AND output_id IN(SELECT id FROM processing_outputs WHERE tenant_id=$1 AND job_id=$2)',[tenant,millJob.data.id]);
   assert.equal(genealogy.rows[0].n,2);
+  const expiryReservationKey='ci-expiry-'+randomUUID();
+  const expiringReservation=await call('admin','/admin/inventory/reservations',{method:'POST',headers:{'idempotency-key':expiryReservationKey},body:JSON.stringify({referenceType:'MANUAL',items:[{productId:product.data.id,quantity:0.25}],expiresInMinutes:5})});
+  assert.equal(expiringReservation.status,200);
+  await pool.query("UPDATE inventory_reservations SET expires_at=now()-interval '1 minute' WHERE id=$1",[expiringReservation.data.id]);
+  const expirySweep=await call('admin','/admin/inventory/reservations/expire',{method:'POST',body:JSON.stringify({})});
+  assert.equal(expirySweep.status,200);assert.equal(expirySweep.data.expiredReservations,1);
+  const expiredReservationRead=await call('admin','/admin/inventory/reservations');
+  assert.equal(expiredReservationRead.data.find(x=>x.id===expiringReservation.data.id).status,'RELEASED');
+  const policyUpdate=await call('admin','/admin/inventory/products/'+product.data.id+'/policy',{method:'PUT',body:JSON.stringify({policy:'FIFO'})});
+  assert.equal(policyUpdate.status,200);assert.equal(policyUpdate.data.policy,'FIFO');
+  const policyRestore=await call('admin','/admin/inventory/products/'+product.data.id+'/policy',{method:'PUT',body:JSON.stringify({policy:'FEFO'})});
+  assert.equal(policyRestore.status,200);
+  const expiryEdit=await call('admin','/admin/inventory/lots/'+sourceForMill.id+'/expiry',{method:'POST',body:JSON.stringify({expiresOn:'2099-12-31',bestBefore:'2099-06-30'})});
+  assert.equal(expiryEdit.status,200);assert.equal(String(expiryEdit.data.expiresOn).slice(0,10),'2099-12-31');
   const ledger=await call('admin','/admin/inventory/ledger?limit=100');
   assert.equal(ledger.status,200);assert.ok(ledger.data.some(x=>x.eventType==='RESERVE'));assert.ok(ledger.data.some(x=>x.eventType==='RELEASE'));assert.ok(ledger.data.some(x=>x.eventType==='ADJUSTMENT_IN'));assert.ok(ledger.data.some(x=>x.eventType==='CONSUME'));assert.ok(ledger.data.some(x=>x.eventType==='TRANSFER_OUT'));
   const customerInventory=await call('customer','/admin/inventory/lots');
@@ -181,6 +196,10 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const recalledTrace=await fetch(base+packed.data.tracePath);const recalledPayload=await recalledTrace.json();assert.equal(recalledPayload.data.status,'RECALLED');
   const recallClosed=await call('admin','/admin/inventory/recalls/'+recall.data.id+'/close',{method:'POST',body:JSON.stringify({reason:'CI recall investigation closed after trace validation'})});
   assert.equal(recallClosed.status,200);assert.equal(recallClosed.data.status,'CLOSED');
+  const reconciliation=await call('admin','/admin/inventory/reconciliation');assert.equal(reconciliation.status,200);assert.equal(reconciliation.data.balanced,true);assert.equal(reconciliation.data.discrepancyCount,0);
+  const ledgerForImmutability=await pool.query('SELECT id FROM inventory_ledger WHERE tenant_id=$1 LIMIT 1',[tenant]);
+  await assert.rejects(pool.query('UPDATE inventory_ledger SET reason=reason WHERE id=$1',[ledgerForImmutability.rows[0].id]),error=>error.code==='55000');
+
 
 
   assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
