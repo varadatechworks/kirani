@@ -44,6 +44,22 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(pending.status,200);assert.equal(pending.data.length,1);
   const decision=await call('admin','/admin/listings/'+listing.data.id+'/decision',{method:'POST',body:JSON.stringify({decision:'approve',reason:'CI approval verification'})});
   assert.equal(decision.status,200);assert.equal(decision.data.status,'APPROVED');
+  const farmerProfile=await call('farmer','/farmers/me/profile',{method:'PUT',body:JSON.stringify({farmName:'CI Organic Farm',farmType:'INDIVIDUAL',village:'Test Village',taluk:'Test Taluk',district:'Bengaluru Rural',state:'Karnataka',postalCode:'561203',farmArea:2.5,farmAreaUnit:'ACRE'})});
+  assert.equal(farmerProfile.status,200);assert.equal(farmerProfile.data.verificationStatus,'PENDING');
+  const farmerProfiles=await call('admin','/admin/farmer-profiles');
+  assert.equal(farmerProfiles.status,200);assert.equal(farmerProfiles.data.length,1);
+  const farmerApproval=await call('admin','/admin/farmer-profiles/'+userIds.farmer+'/decision',{method:'POST',body:JSON.stringify({decision:'approve',reason:'CI identity and farm verification'})});
+  assert.equal(farmerApproval.status,200);assert.equal(farmerApproval.data.verificationStatus,'APPROVED');
+  const expectedDeliveryDate=(await pool.query('SELECT (current_date+2)::text AS d')).rows[0].d;
+  const po=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CI-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:10,unitPriceMinor:7000,expectedDeliveryDate})});
+  assert.equal(po.status,200);assert.equal(po.data.status,'ISSUED');assert.equal(po.data.items.length,1);
+  const farmerPos=await call('farmer','/farmers/me/procurement-orders');
+  assert.equal(farmerPos.status,200);assert.equal(farmerPos.data.length,1);
+  const poResponse=await call('farmer','/farmers/me/procurement-orders/'+po.data.id+'/response',{method:'POST',body:JSON.stringify({decision:'accept',acceptedQuantity:8,reason:'Accepting available harvest quantity'})});
+  assert.equal(poResponse.status,200);assert.equal(poResponse.data.status,'ACCEPTED');
+  const allocated=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
+  assert.equal(allocated,'8.000');
+
 
   const catalogue=await call('customer','/catalogue/products');
   assert.equal(catalogue.status,200);assert.equal(catalogue.data[0].approvedFarmerListings,1);
