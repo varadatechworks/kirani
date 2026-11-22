@@ -35,16 +35,22 @@ export async function handlePackingRoutes(ctx){
   const base=process.env.PUBLIC_APP_URL;
   if(!base)fail(503,'PUBLIC_APP_URL_NOT_CONFIGURED','Public application URL must be configured before printing QR labels.');
   let origin;try{origin=new URL(base);if(!['http:','https:'].includes(origin.protocol)||origin.username||origin.password)throw new Error('invalid')}catch{fail(503,'PUBLIC_APP_URL_INVALID','Public application URL configuration is invalid.');}
-  const q=await db.query('SELECT id,package_number,public_token,status,packed_at FROM packages WHERE id=$1 AND tenant_id=$2',[labelMatch[1],auth.tenantId]);
-  if(!q.rowCount)fail(404,'PACKAGE_NOT_FOUND','Package was not found.');
+  const q=await db.query('SELECT id,package_number,public_token,status,packed_at,public_token_revoked_at FROM packages WHERE id=$1 AND tenant_id=$2',[labelMatch[1],auth.tenantId]);
+  if(!q.rowCount)fail(404,'PACKAGE_NOT_FOUND','Package was not found.');if(q.rows[0].public_token_revoked_at)fail(409,'PACKAGE_TRACE_REVOKED','The public trace token for this package has been revoked.');
   const items=await db.query('SELECT pr.name AS product_name,pi.quantity::text,pi.unit_code FROM package_items pi JOIN products pr ON pr.id=pi.product_id AND pr.tenant_id=pi.tenant_id WHERE pi.tenant_id=$1 AND pi.package_id=$2 ORDER BY pr.name',[auth.tenantId,q.rows[0].id]);
   const traceUrl=new URL('/trace/'+q.rows[0].public_token,origin).toString();
   const qrSvg=await QRCode.toString(traceUrl,{type:'svg',errorCorrectionLevel:'H',margin:2,width:320});
   return send(res,{packageNumber:q.rows[0].package_number,status:q.rows[0].status,packedAt:q.rows[0].packed_at,traceUrl,qrSvg,items:items.rows.map(x=>({productName:x.product_name,quantity:x.quantity,unitCode:x.unit_code}))},cid),true;
  }
+ const revokeMatch=path.match(/^\\/api\\/v1\\/admin\\/packing\\/packages\\/([0-9a-f-]{36})\\/revoke-trace$/i);
+ if(method==='POST'&&revokeMatch){
+  const b=await bodyJson(req);if(typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.trim().length>500)fail(422,'TRACE_REVOCATION_REASON_REQUIRED','Provide a reason of at least five characters.');
+  const result=await transaction(async client=>{const q=await client.query('SELECT id,public_token_revoked_at FROM packages WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[revokeMatch[1],auth.tenantId]);if(!q.rowCount)fail(404,'PACKAGE_NOT_FOUND','Package was not found.');if(q.rows[0].public_token_revoked_at)return {id:q.rows[0].id,revokedAt:q.rows[0].public_token_revoked_at,replayed:true};const updated=await client.query('UPDATE packages SET public_token_revoked_at=now(),updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING public_token_revoked_at',[revokeMatch[1],auth.tenantId]);await audit(client,auth,cid,'package.trace_revoked','package',revokeMatch[1],{reason:b.reason.trim()});return {id:q.rows[0].id,revokedAt:updated.rows[0].public_token_revoked_at,replayed:false};});
+  return send(res,result,cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/packing/packages'){
   const q=await db.query(`SELECT p.*,count(DISTINCT pi.id)::int AS line_count,COALESCE(sum(pi.quantity),0)::text AS packed_quantity FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id AND pi.tenant_id=p.tenant_id WHERE p.tenant_id=$1 GROUP BY p.id ORDER BY p.packed_at DESC LIMIT 100`,[auth.tenantId]);
-  return send(res,q.rows.map(x=>({id:x.id,packageNumber:x.package_number,publicToken:x.public_token,tracePath:'/api/v1/public/trace/'+x.public_token,orderId:x.order_id,status:x.status,packedAt:x.packed_at,lineCount:x.line_count,quantity:x.packed_quantity})),cid),true;
+  return send(res,q.rows.map(x=>({id:x.id,packageNumber:x.package_number,publicToken:x.public_token,tracePath:'/api/v1/public/trace/'+x.public_token,traceRevoked:Boolean(x.public_token_revoked_at),orderId:x.order_id,status:x.status,packedAt:x.packed_at,lineCount:x.line_count,quantity:x.packed_quantity})),cid),true;
  }
  if(method==='POST'&&path==='/api/v1/admin/packing/packages'){
   const b=await bodyJson(req);if(!/^[0-9a-f-]{36}$/i.test(b.orderId)||typeof b.packageNumber!=='string'||b.packageNumber.trim().length<3||b.packageNumber.trim().length>60||!Array.isArray(b.items)||b.items.length<1||b.items.length>50)fail(422,'PACKAGE_VALIDATION','Provide an order, package number and at least one packed item.');
