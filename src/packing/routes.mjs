@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 const milli=v=>{const s=String(v);if(!/^\d+(?:\.\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
 const qty=n=>Number(n)/1000;
 export async function handlePublicTrace(ctx){
@@ -29,6 +30,18 @@ export async function handlePublicTrace(ctx){
 export async function handlePackingRoutes(ctx){
  const {req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole}=ctx;
  if(!path.startsWith('/api/v1/admin/packing/'))return false;requireRole(auth,'admin');
+ const labelMatch=path.match(/^\\/api\\/v1\\/admin\\/packing\\/packages\\/([0-9a-f-]{36})\\/label$/i);
+ if(method==='GET'&&labelMatch){
+  const base=process.env.PUBLIC_APP_URL;
+  if(!base)fail(503,'PUBLIC_APP_URL_NOT_CONFIGURED','Public application URL must be configured before printing QR labels.');
+  let origin;try{origin=new URL(base);if(!['http:','https:'].includes(origin.protocol)||origin.username||origin.password)throw new Error('invalid')}catch{fail(503,'PUBLIC_APP_URL_INVALID','Public application URL configuration is invalid.');}
+  const q=await db.query('SELECT id,package_number,public_token,status,packed_at FROM packages WHERE id=$1 AND tenant_id=$2',[labelMatch[1],auth.tenantId]);
+  if(!q.rowCount)fail(404,'PACKAGE_NOT_FOUND','Package was not found.');
+  const items=await db.query('SELECT pr.name AS product_name,pi.quantity::text,pi.unit_code FROM package_items pi JOIN products pr ON pr.id=pi.product_id AND pr.tenant_id=pi.tenant_id WHERE pi.tenant_id=$1 AND pi.package_id=$2 ORDER BY pr.name',[auth.tenantId,q.rows[0].id]);
+  const traceUrl=new URL('/trace/'+q.rows[0].public_token,origin).toString();
+  const qrSvg=await QRCode.toString(traceUrl,{type:'svg',errorCorrectionLevel:'H',margin:2,width:320});
+  return send(res,{packageNumber:q.rows[0].package_number,status:q.rows[0].status,packedAt:q.rows[0].packed_at,traceUrl,qrSvg,items:items.rows.map(x=>({productName:x.product_name,quantity:x.quantity,unitCode:x.unit_code}))},cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/packing/packages'){
   const q=await db.query(`SELECT p.*,count(DISTINCT pi.id)::int AS line_count,COALESCE(sum(pi.quantity),0)::text AS packed_quantity FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id AND pi.tenant_id=p.tenant_id WHERE p.tenant_id=$1 GROUP BY p.id ORDER BY p.packed_at DESC LIMIT 100`,[auth.tenantId]);
   return send(res,q.rows.map(x=>({id:x.id,packageNumber:x.package_number,publicToken:x.public_token,tracePath:'/api/v1/public/trace/'+x.public_token,orderId:x.order_id,status:x.status,packedAt:x.packed_at,lineCount:x.line_count,quantity:x.packed_quantity})),cid),true;
