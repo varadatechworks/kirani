@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { pool } from './db/pool.mjs';
 import { bearerToken, verifyAccessToken } from './security/jwt.mjs';
 import { correlationId } from './shared/skeleton/observability.mjs';
+import { handleOrderRoutes } from './orders/routes.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -158,6 +159,8 @@ async function route(req,res,cid){
     const r=await transaction(async c=>{const q=await c.query('SELECT * FROM farmer_listings WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[decision[1],auth.tenantId]);if(!q.rowCount)fail(404,'LISTING_NOT_FOUND','Listing was not found.');if(q.rows[0].farmer_id===auth.userId)fail(403,'MAKER_CHECKER_REQUIRED','A farmer cannot approve their own listing.');const next=statusMap[b.decision];const allowed={SUBMITTED:['APPROVED','REJECTED','CHANGES_REQUESTED'],UNDER_REVIEW:['APPROVED','REJECTED','CHANGES_REQUESTED'],APPROVED:['SUSPENDED'],SUSPENDED:['APPROVED','REJECTED']};if(!allowed[q.rows[0].status]?.includes(next))fail(409,'LISTING_STATE_CONFLICT','This listing cannot receive that decision in its current state.');const u=await c.query('UPDATE farmer_listings SET status=$1,reviewed_by=$2,reviewed_at=now(),review_note=$3 WHERE id=$4 RETURNING *',[next,auth.userId,b.reason.trim(),decision[1]]);await audit(c,auth,cid,'farmer_listing.'+b.decision,'farmer_listing',decision[1],{reason:b.reason.trim()});return u.rows[0];});
     return send(res,{id:r.id,status:r.status,reviewNote:r.review_note},cid);
   }
+
+  if(await handleOrderRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
