@@ -16,7 +16,12 @@ import { handleLoyaltyRoutes } from './loyalty/routes.mjs';
 import { handleEngagementRoutes } from './engagement/routes.mjs';
 import { handleFinanceRoutes, handleRazorpayWebhook } from './finance/routes.mjs';
 import { createRateLimiter } from './security/rate-limit.mjs';
+import { runInventoryExpirySweep } from './workers/maintenance.mjs';
 
+const maintenanceIntervalMs=Math.max(15_000,Number(process.env.KIRANI_MAINTENANCE_INTERVAL_MS??60_000));
+let maintenanceRunning=false;
+const runMaintenance=async()=>{if(!pool||maintenanceRunning)return;maintenanceRunning=true;try{const result=await runInventoryExpirySweep(pool);if(result.expiredReservations)process.stdout.write(JSON.stringify({event:'maintenance_completed',task:'inventory_reservation_expiry',...result})+'\\n');}catch(error){process.stderr.write(JSON.stringify({event:'maintenance_failed',task:'inventory_reservation_expiry',errorCode:error?.code??'MAINTENANCE_ERROR'})+'\\n');}finally{maintenanceRunning=false;}};
+const maintenanceTimer=setInterval(runMaintenance,maintenanceIntervalMs);maintenanceTimer.unref?.();
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html':'text/html; charset=utf-8', '.webmanifest':'application/manifest+json; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.svg':'image/svg+xml' };
@@ -205,5 +210,5 @@ const server=http.createServer(async(req,res)=>{
   try{await route(req,res,cid);}catch(error){if(!(error instanceof HttpError))process.stderr.write(JSON.stringify({event:'request_failed',correlationId:cid,errorCode:error?.code??'INTERNAL_ERROR',errorType:error?.name??'Error'})+'\\n');if(!res.headersSent)sendError(res,error,cid);else res.destroy();}
 });
 server.listen(port,'0.0.0.0',()=>process.stdout.write(JSON.stringify({event:'server_started',port})+'\n'));
-const shutdown=()=>server.close(async()=>{if(pool)await pool.end();process.exit(0);});
+const shutdown=()=>{clearInterval(maintenanceTimer);server.close(async()=>{if(pool)await pool.end();process.exit(0);});};
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
