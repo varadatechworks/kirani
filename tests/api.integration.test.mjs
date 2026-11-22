@@ -322,6 +322,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(secondPayment.status,200);
   const gatewayOrderId='order_ci_'+randomUUID().replaceAll('-','');
   await pool.query("INSERT INTO payment_intents(tenant_id,order_id,provider,provider_order_id,amount_minor,currency,status,created_by) VALUES($1,$2,'RAZORPAY',$3,500,'INR','OPEN',$4)",[tenant,secondOrder.data.id,gatewayOrderId,userIds.customer]);
+  await assert.rejects(pool.query("INSERT INTO payment_intents(tenant_id,order_id,provider,provider_order_id,amount_minor,currency,status,created_by) VALUES($1,$2,'RAZORPAY',$3,500,'INR','OPEN',$4)",[otherTenant,secondOrder.data.id,gatewayOrderId,otherAdminUser]),error=>error.code==='23505');
   const gatewayEventId='evt_'+randomUUID().replaceAll('-','');
   const gatewayPayload={event:'payment.captured',payload:{payment:{entity:{id:'pay_'+randomUUID().replaceAll('-',''),order_id:gatewayOrderId,amount:500,currency:'INR'}}}};
   const gatewayBody=JSON.stringify(gatewayPayload);
