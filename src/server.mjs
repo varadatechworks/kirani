@@ -37,7 +37,7 @@ const authenticate=async req=>{
   return {userId:user.id,tenantId:user.tenant_id,displayName:user.display_name,email:user.email,phone:user.phone,locale:user.locale,roles:user.roles,sessionId:claims.sessionId};
 };
 const productShape=r=>({id:r.id,sku:r.sku,name:r.name,description:r.description,category:r.category,baseUnit:r.base_unit,priceMinor:String(r.price_minor),currency:String(r.currency??'INR').trim(),active:r.active,approvedFarmerListings:Number(r.approved_farmer_listings??0)});
-const cycleShape=r=>({id:r.id,code:r.code,startsOn:r.starts_on,deliveryFrom:r.delivery_from,deliveryTo:r.delivery_to,cutoffAt:r.cutoff_at,status:r.status});
+const cycleShape=r=>({id:r.id,code:r.code,startsOn:String(r.starts_on).slice(0,10),deliveryFrom:String(r.delivery_from).slice(0,10),deliveryTo:String(r.delivery_to).slice(0,10),cutoffAt:r.cutoff_at,status:r.status});
 const orderShape=r=>({id:r.id,customerId:r.customer_id,cycleId:r.cycle_id,orderType:r.order_type,fulfilmentStatus:r.fulfilment_status,paymentStatus:r.payment_status,currency:String(r.currency??'INR').trim(),subtotalMinor:String(r.subtotal_minor),discountMinor:String(r.discount_minor),taxMinor:String(r.tax_minor),totalMinor:String(r.total_minor),createdAt:r.created_at});
 async function route(req,res,cid){
   const url=new URL(req.url,'http://kirani.local');const path=url.pathname;const method=req.method;
