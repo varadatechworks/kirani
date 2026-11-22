@@ -26,6 +26,12 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const cycle=(await pool.query("INSERT INTO grocery_cycles(tenant_id,code,starts_on,delivery_from,delivery_to,cutoff_at,status) VALUES($1,$2,current_date,current_date,current_date+3,now()+interval '2 days','OPEN') RETURNING id",[tenant,'CI-'+randomUUID()])).rows[0].id;
   const token=role=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const header=enc({alg:'HS256',typ:'JWT'});const claims=enc({sub:userIds[role],tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]});const unsigned=header+'.'+claims;return unsigned+'.'+createHmac('sha256',secret).update(unsigned).digest('base64url');};
   const tokens={admin:token('admin'),admin2:(()=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const h=enc({alg:'HS256',typ:'JWT'}),p=enc({sub:userIds.admin2,tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['admin']});const u=h+'.'+p;return u+'.'+createHmac('sha256',secret).update(u).digest('base64url')})(),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator'),delivery_operator:token('delivery_operator')};
+  const otherTenant=(await pool.query("INSERT INTO tenants(name) VALUES($1) RETURNING id",['CI Other Tenant '+randomUUID()])).rows[0].id;
+  const otherAdminRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'admin','Admin') RETURNING id",[otherTenant])).rows[0].id;
+  const otherAdminUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant admin',$2,'active') RETURNING id",[otherTenant,'other-admin-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[otherAdminUser,otherAdminRole]);
+  const otherEnc=v=>Buffer.from(JSON.stringify(v)).toString('base64url'),otherHeader=otherEnc({alg:'HS256',typ:'JWT'}),otherClaims=otherEnc({sub:otherAdminUser,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['admin']}),otherUnsigned=otherHeader+'.'+otherClaims;
+  tokens.otherAdmin=otherUnsigned+'.'+createHmac('sha256',secret).update(otherUnsigned).digest('base64url');
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -231,6 +237,10 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const simultaneous=await Promise.all([call('customer','/customers/me/orders',orderOptions),call('customer','/customers/me/orders',orderOptions)]);
   assert.equal(simultaneous.every(x=>x.status===200),true);assert.equal(simultaneous[0].data.id,simultaneous[1].data.id);
   assert.equal(simultaneous.filter(x=>x.data.idempotentReplay).length,1);
+  const crossTenantOrder=await call('otherAdmin','/orders/'+simultaneous[0].data.id);
+  assert.equal(crossTenantOrder.status,404);assert.equal(crossTenantOrder.error.code,'ORDER_NOT_FOUND');
+  const otherTenantLots=await call('otherAdmin','/admin/inventory/lots');
+  assert.equal(otherTenantLots.status,200);assert.equal(otherTenantLots.data.length,0);
   const order=simultaneous[0];
   assert.equal(order.data.fulfilmentStatus,'PLACED');assert.equal(order.data.totalMinor,'17000');
   const replay=await call('customer','/customers/me/orders',orderOptions);
