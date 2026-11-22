@@ -1,4 +1,4 @@
-const milli=v=>{const s=String(v);if(!/^\\d+(?:\\.\\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
+const milli=v=>{const s=String(v);if(!/^-?\\d+(?:\\.\\d{1,3})?$/.test(s))return null;const negative=s.startsWith('-');const [w,f='']=s.replace(/^-/,'').split('.');const n=BigInt(w)*1000n+BigInt((f+'000').slice(0,3));return negative?-n:n;};
 const qty=v=>Number(v)/1000;
 const validId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function handleInventoryRoutes(ctx){
