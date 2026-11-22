@@ -28,19 +28,19 @@ export async function handleEngagementRoutes(ctx){
    if(b.userId)recipients=await client.query("SELECT id,email FROM users WHERE id=$1 AND tenant_id=$2 AND status='active'",[b.userId,auth.tenantId]);
    else if(Array.isArray(b.roles)&&b.roles.length)recipients=await client.query('SELECT DISTINCT u.id,u.email FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id AND r.tenant_id=u.tenant_id WHERE u.tenant_id=$1 AND u.status=$2 AND r.code=ANY($3::text[])',[auth.tenantId,'active',b.roles]);
    else recipients=await client.query("SELECT id,email FROM users WHERE tenant_id=$1 AND status='active' AND id<>$2",[auth.tenantId,auth.userId]);
-   let created=0,queuedEmails=0;
+   let created=0,inAppCreated=0,queuedEmails=0;
    for(const user of recipients.rows){
     const pref=await client.query('SELECT in_app_enabled,email_enabled FROM notification_preferences WHERE tenant_id=$1 AND user_id=$2 AND category=$3',[auth.tenantId,user.id,b.category]);
     const inApp=pref.rowCount?pref.rows[0].in_app_enabled:true;
     const email=Boolean(pref.rowCount&&pref.rows[0].email_enabled&&user.email);
     if(!inApp&&!email)continue;
     let notificationId=null;
-    if(inApp){const n=await client.query('INSERT INTO app_notifications(tenant_id,user_id,category,title,body,resource_type,resource_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',[auth.tenantId,user.id,b.category,b.title.trim(),b.body.trim(),b.resourceType??null,b.resourceId??null]);notificationId=n.rows[0].id;}
+    if(inApp){const n=await client.query('INSERT INTO app_notifications(tenant_id,user_id,category,title,body,resource_type,resource_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',[auth.tenantId,user.id,b.category,b.title.trim(),b.body.trim(),b.resourceType??null,b.resourceId??null]);notificationId=n.rows[0].id;inAppCreated++;}
     if(email){await client.query("INSERT INTO notification_email_outbox(tenant_id,notification_id,user_id,recipient_email,subject,body_text) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,notification_id) DO NOTHING",[auth.tenantId,notificationId,user.id,user.email,b.title.trim(),b.body.trim()]);queuedEmails++;}
     created++;
    }
    await audit(client,auth,cid,'notification.broadcast_created','app_notification',b.resourceId??'',{category:b.category,recipientCount:created,queuedEmailCount:queuedEmails});
-   return {recipientCount:created,inAppRecipients:created-queuedEmails,queuedEmailCount:queuedEmails,channels:['IN_APP',...(queuedEmails?['EMAIL']:[])]};
+   return {recipientCount:created,inAppRecipients:inAppCreated,queuedEmailCount:queuedEmails,channels:['IN_APP',...(queuedEmails?['EMAIL']:[])]};
   });
   return send(res,result,cid),true;
  }
