@@ -7,15 +7,22 @@ export async function handlePublicTrace(ctx){
  const token=match[1];const p=await db.query('SELECT p.id,p.package_number,p.status,p.packed_at,o.currency FROM packages p JOIN orders o ON o.id=p.order_id AND o.tenant_id=p.tenant_id WHERE p.public_token=$1',[token]);
  if(!p.rowCount)fail(404,'TRACE_NOT_FOUND','This package trace is unavailable or the code is invalid.');
  const items=await db.query('SELECT pi.id,pi.quantity::text,pi.unit_code,pr.name AS product_name,pr.sku FROM package_items pi JOIN products pr ON pr.id=pi.product_id AND pr.tenant_id=pi.tenant_id WHERE pi.tenant_id=(SELECT tenant_id FROM packages WHERE id=$1) AND pi.package_id=$1 ORDER BY pr.name',[p.rows[0].id]);
- const batches=await db.query(`WITH RECURSIVE lot_tree(lot_id,depth) AS (
-  SELECT a.inventory_lot_id,0 FROM package_batch_allocations a JOIN package_items i ON i.id=a.package_item_id AND i.tenant_id=a.tenant_id WHERE i.package_id=$1
+ const batches=await db.query(`WITH RECURSIVE trace_outputs(output_id,depth) AS (
+  SELECT il.processing_output_id,0 FROM package_batch_allocations a JOIN package_items i ON i.id=a.package_item_id AND i.tenant_id=a.tenant_id JOIN inventory_lots il ON il.id=a.inventory_lot_id AND il.tenant_id=a.tenant_id WHERE i.package_id=$1 AND il.processing_output_id IS NOT NULL
   UNION
-  SELECT COALESCE(g.source_lot_id,parent.id),t.depth+1 FROM lot_tree t JOIN inventory_lots current_lot ON current_lot.id=t.lot_id JOIN processing_output_genealogy g ON g.tenant_id=current_lot.tenant_id AND g.output_id=current_lot.processing_output_id LEFT JOIN inventory_lots parent ON parent.tenant_id=current_lot.tenant_id AND parent.processing_output_id=g.parent_output_id WHERE t.depth<20 AND (g.source_lot_id IS NOT NULL OR parent.id IS NOT NULL)
+  SELECT g.parent_output_id,t.depth+1 FROM trace_outputs t JOIN processing_output_genealogy g ON g.output_id=t.output_id WHERE g.parent_output_id IS NOT NULL AND t.depth<20
+ ), source_lots(lot_id) AS (
+  SELECT il.id FROM package_batch_allocations a JOIN package_items i ON i.id=a.package_item_id AND i.tenant_id=a.tenant_id JOIN inventory_lots il ON il.id=a.inventory_lot_id AND il.tenant_id=a.tenant_id WHERE i.package_id=$1 AND il.goods_receipt_item_id IS NOT NULL
+  UNION
+  SELECT g.source_lot_id FROM trace_outputs t JOIN processing_output_genealogy g ON g.output_id=t.output_id WHERE g.source_lot_id IS NOT NULL
+ ), all_lots(lot_id) AS (
+  SELECT il.id FROM package_batch_allocations a JOIN package_items i ON i.id=a.package_item_id AND i.tenant_id=a.tenant_id JOIN inventory_lots il ON il.id=a.inventory_lot_id AND il.tenant_id=a.tenant_id WHERE i.package_id=$1
+  UNION SELECT lot_id FROM source_lots
  )
- SELECT DISTINCT il.lot_code,il.received_at,p.name AS product_name,gr.receipt_number,po.po_number,stages.stage_summary
- FROM lot_tree t JOIN inventory_lots il ON il.id=t.lot_id JOIN products p ON p.id=il.product_id
+ SELECT DISTINCT il.lot_code,il.received_at,p.name AS product_name,gr.receipt_number,po.po_number,
+ (SELECT string_agg(s.stage_name,' → ' ORDER BY s.sequence_no) FROM trace_outputs t JOIN processing_outputs outp ON outp.id=t.output_id JOIN processing_job_stages s ON s.id=outp.stage_id AND s.tenant_id=outp.tenant_id) AS stage_summary
+ FROM all_lots a JOIN inventory_lots il ON il.id=a.lot_id JOIN products p ON p.id=il.product_id
  LEFT JOIN goods_receipt_items gri ON gri.id=il.goods_receipt_item_id LEFT JOIN goods_receipts gr ON gr.id=gri.goods_receipt_id AND gr.tenant_id=gri.tenant_id LEFT JOIN procurement_orders po ON po.id=gr.procurement_order_id AND po.tenant_id=gr.tenant_id
- LEFT JOIN LATERAL(SELECT string_agg(s.stage_name,' → ' ORDER BY s.sequence_no) AS stage_summary FROM processing_outputs outp JOIN processing_job_stages s ON s.id=outp.stage_id AND s.tenant_id=outp.tenant_id WHERE outp.id=il.processing_output_id) stages ON true
  ORDER BY il.received_at`,[p.rows[0].id]);
  return send(res,{packageNumber:p.rows[0].package_number,status:p.rows[0].status,packedAt:p.rows[0].packed_at,items:items.rows.map(x=>({productName:x.product_name,sku:x.sku,quantity:x.quantity,unitCode:x.unit_code})),sourceBatches:batches.rows.map(x=>({batchCode:x.lot_code,productName:x.product_name,receivedAt:x.received_at,receiptNumber:x.receipt_number||null,purchaseOrder:x.po_number||null,processingStages:x.stage_summary||null})),disclosure:'This page shows approved product and batch trace details only. Farmer contact, private address and payment details are not disclosed.'},cid),true;
 }
