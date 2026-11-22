@@ -34,6 +34,30 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(me.status,200);assert.equal(me.data.roles[0],'admin');
   const dashboard=await call('admin','/admin/dashboard');
   assert.equal(dashboard.status,200);assert.equal(dashboard.data.openCycles,1);
+  const today=new Date().toISOString().slice(0,10);
+  const loyaltyPolicy=await call('admin','/admin/loyalty/policies',{method:'POST',body:JSON.stringify({effectiveFrom:today,pointsPerRupee:1,pointValuePaise:50,redemptionCapBps:2000,minimumRedemptionPoints:1,maximumRedemptionPoints:1000})});
+  assert.equal(loyaltyPolicy.status,200);assert.equal(loyaltyPolicy.data.version,1);
+  const loyaltyWallet=await call('customer','/customers/me/loyalty');
+  assert.equal(loyaltyWallet.status,200);assert.equal(loyaltyWallet.data.activePolicy.pointValuePaise,50);
+  const notification=await call('admin','/admin/notifications',{method:'POST',body:JSON.stringify({category:'SYSTEM',title:'Kirani test notice',body:'Notification inbox integration test',roles:['customer']})});
+  assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,1);
+  const inbox=await call('customer','/customers/me/notifications');
+  assert.equal(inbox.status,200);assert.ok(inbox.data.some(x=>x.title==='Kirani test notice'));
+  const notice=inbox.data.find(x=>x.title==='Kirani test notice');
+  const readNotice=await call('customer','/customers/me/notifications/'+notice.id+'/read',{method:'POST',body:JSON.stringify({})});
+  assert.equal(readNotice.status,200);assert.ok(readNotice.data.readAt);
+  const ticket=await call('customer','/customers/me/support',{method:'POST',body:JSON.stringify({category:'ORDER',subject:'Question about delivery',message:'Please confirm my expected delivery window.'})});
+  assert.equal(ticket.status,200);assert.equal(ticket.data.status,'OPEN');
+  const supportQueue=await call('admin','/admin/support');assert.ok(supportQueue.data.some(x=>x.id===ticket.data.id));
+  const supportReply=await call('admin','/admin/support/'+ticket.data.id+'/messages',{method:'POST',body:JSON.stringify({message:'Your delivery window is being checked by our operations team.'})});
+  assert.equal(supportReply.status,200);
+  const customerTicket=await call('customer','/customers/me/support/'+ticket.data.id);
+  assert.equal(customerTicket.status,200);assert.equal(customerTicket.data.messages.length,2);
+  const supportDecision=await call('admin','/admin/support/'+ticket.data.id+'/decision',{method:'POST',body:JSON.stringify({status:'RESOLVED',priority:'NORMAL'})});
+  assert.equal(supportDecision.status,200);assert.equal(supportDecision.data.status,'RESOLVED');
+  const report=await call('admin','/admin/reports/operations');
+  assert.equal(report.status,200);assert.ok(report.data.orders);assert.ok(report.data.inventory);
+
 
   const product=await call('admin','/admin/catalogue/products',{method:'POST',body:JSON.stringify({sku:'CI-'+randomUUID(),name:'Integration Rice',category:'Grains',baseUnit:'KG',priceMinor:8500,currency:'INR'})});
   assert.equal(product.status,200);assert.equal(product.data.priceMinor,'8500');
@@ -200,6 +224,20 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(deliveryStart.status,200);assert.equal(deliveryStart.data.status,'OUT_FOR_DELIVERY');
   const pod=await call('delivery_operator','/delivery/assignments/'+deliveryAssignment.data.id+'/pod',{method:'POST',body:JSON.stringify({latitude:12.9716,longitude:77.5946,receivedBy:'CI Recipient',reason:'CI partial delivery accepted',cashCollected:0,items:[{orderItemId:orderDetail.data.items[0].id,quantityDelivered:0.4,quantityRefused:0,reason:'Remaining quantity requires another packed dispatch'}]})});
   assert.equal(pod.status,200);assert.equal(pod.data.outcome,'PARTIAL');assert.equal(pod.data.status,'PARTIALLY_DELIVERED');
+  await pool.query("UPDATE orders SET fulfilment_status='DELIVERED',payment_status='SETTLED' WHERE id=$1 AND tenant_id=$2",[order.data.id,tenant]);
+  const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
+  assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);
+  const earnedReplay=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
+  assert.equal(earnedReplay.status,200);assert.equal(earnedReplay.data.status,'ALREADY_EARNED');
+  const secondOrder=await call('customer','/customers/me/orders',{method:'POST',headers:{'idempotency-key':'ci-order-redeem-'+randomUUID()},body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})});
+  assert.equal(secondOrder.status,200);
+  const redemptionKey='ci-loyalty-'+randomUUID();
+  const redeemed=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
+  assert.equal(redeemed.status,200);assert.equal(redeemed.data.pointsRedeemed,'10');
+  const redemptionReplay=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
+  assert.equal(redemptionReplay.status,200);assert.equal(redemptionReplay.data.replayed,true);
+  const finalWallet=await call('customer','/customers/me/loyalty');assert.equal(finalWallet.status,200);assert.ok(BigInt(finalWallet.data.balancePoints)>=0n);
+
 
   const recall=await call('admin','/admin/inventory/recalls',{method:'POST',body:JSON.stringify({recallNumber:'RECALL-CI-'+randomUUID(),sourceLotId:sourceForMill.id,reason:'CI source contamination recall exercise'})});
   assert.equal(recall.status,200);assert.equal(recall.data.status,'OPEN');assert.equal(recall.data.affectedPackages,1);assert.ok(recall.data.affectedLots>=3);
