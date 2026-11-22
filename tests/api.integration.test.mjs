@@ -288,7 +288,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const tracePage=await fetch(base+packed.data.tracePath.replace('/api/v1/public/trace/','/trace/'));assert.equal(tracePage.status,200);assert.match(await tracePage.text(),/Product trace/);
   const exportFrom=new Date().toISOString().slice(0,10),exportQuery='from='+exportFrom+'&to='+exportFrom;
   const operationsCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
-  assert.equal(operationsCsv.status,200);assert.match(operationsCsv.headers.get('content-type'),/text\\/csv/);assert.match(await operationsCsv.text(),new RegExp(order.data.id));
+  assert.equal(operationsCsv.status,200);assert.ok(operationsCsv.headers.get('content-type').includes('text/csv'));assert.match(await operationsCsv.text(),new RegExp(order.data.id));
   const financeCsv=await fetch(base+'/api/v1/admin/reports/export?type=finance&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
   assert.equal(financeCsv.status,200);assert.match(await financeCsv.text(),/CAPTURE/);
   const traceCsv=await fetch(base+'/api/v1/admin/reports/export?type=traceability&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
