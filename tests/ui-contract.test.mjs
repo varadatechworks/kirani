@@ -10,7 +10,7 @@ test('inline browser application script parses successfully',()=>{
   assert.doesNotThrow(()=>new Script(scripts[0]));
 });
 test('frontend calls tenant-scoped APIs and does not persist access tokens',()=>{
-  assert.ok(html.includes("fetch('/api/v1'+path)"));
+  assert.ok(html.includes("fetch('/api/v1'+path,"));
   assert.ok(html.includes('/customers/me/recurring-basket'));
   assert.ok(html.includes('/farmers/me/listings'));
   assert.ok(!html.includes('localStorage'));
