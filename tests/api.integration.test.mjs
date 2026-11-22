@@ -20,7 +20,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   for(const role of ['admin','farmer','customer','mill_operator'])roleIds[role]=(await pool.query('INSERT INTO roles(tenant_id,code,name) VALUES($1,$2,$3) RETURNING id',[tenant,role,role])).rows[0].id;
   const userIds={};
   for(const role of ['admin','farmer','customer','mill_operator'])userIds[role]=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,$2,$3,'active') RETURNING id",[tenant,'CI '+role,role+'-'+randomUUID()+'@kirani.test'])).rows[0].id;
-  for(const role of ['admin','farmer','customer'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
+  for(const role of ['admin','farmer','customer','mill_operator'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
   const cycle=(await pool.query("INSERT INTO grocery_cycles(tenant_id,code,starts_on,delivery_from,delivery_to,cutoff_at,status) VALUES($1,$2,current_date,current_date,current_date+3,now()+interval '2 days','OPEN') RETURNING id",[tenant,'CI-'+randomUUID()])).rows[0].id;
   const token=role=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const header=enc({alg:'HS256',typ:'JWT'});const claims=enc({sub:userIds[role],tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]});const unsigned=header+'.'+claims;return unsigned+'.'+createHmac('sha256',secret).update(unsigned).digest('base64url');};
   const tokens={admin:token('admin'),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator')};
