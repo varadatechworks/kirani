@@ -21,7 +21,15 @@ import { runNotificationEmailSweep } from './workers/notifications.mjs';
 
 const maintenanceIntervalMs=Math.max(15_000,Number(process.env.KIRANI_MAINTENANCE_INTERVAL_MS??60_000));
 let maintenanceRunning=false;
-const runMaintenance=async()=>{if(!pool||maintenanceRunning)return;maintenanceRunning=true;try{const result=await runInventoryExpirySweep(pool);if(result.expiredReservations)process.stdout.write(JSON.stringify({event:'maintenance_completed',task:'inventory_reservation_expiry',...result})+'\\n');const email=await runNotificationEmailSweep(pool);if(email.sent||email.failed)process.stdout.write(JSON.stringify({event:'maintenance_completed',task:'notification_email_delivery',...email})+'\\n');}catch(error){process.stderr.write(JSON.stringify({event:'maintenance_failed',task:'inventory_reservation_expiry',errorCode:error?.code??'MAINTENANCE_ERROR'})+'\\n');}finally{maintenanceRunning=false;}};
+const runMaintenance=async()=>{
+ if(!pool||maintenanceRunning)return;
+ maintenanceRunning=true;
+ try{const result=await runInventoryExpirySweep(pool);if(result.expiredReservations)process.stdout.write(JSON.stringify({event:'maintenance_completed',task:'inventory_reservation_expiry',...result})+'\\n');}
+ catch(error){process.stderr.write(JSON.stringify({event:'maintenance_failed',task:'inventory_reservation_expiry',errorCode:error?.code??'MAINTENANCE_ERROR'})+'\\n');}
+ try{const email=await runNotificationEmailSweep(pool);if(email.sent||email.failed)process.stdout.write(JSON.stringify({event:'maintenance_completed',task:'notification_email_delivery',...email})+'\\n');}
+ catch(error){process.stderr.write(JSON.stringify({event:'maintenance_failed',task:'notification_email_delivery',errorCode:error?.code??'MAINTENANCE_ERROR'})+'\\n');}
+ finally{maintenanceRunning=false;}
+};
 const maintenanceTimer=setInterval(runMaintenance,maintenanceIntervalMs);maintenanceTimer.unref?.();
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
