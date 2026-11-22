@@ -1,3 +1,4 @@
+import { runInventoryExpirySweep } from '../src/workers/maintenance.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -221,6 +222,11 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(expirySweep.status,200);assert.equal(expirySweep.data.expiredReservations,1);
   const expiredReservationRead=await call('admin','/admin/inventory/reservations');
   assert.equal(expiredReservationRead.data.find(x=>x.id===expiringReservation.data.id).status,'RELEASED');
+  const workerReservation=await call('admin','/admin/inventory/reservations',{method:'POST',headers:{'idempotency-key':'ci-worker-expiry-'+randomUUID()},body:JSON.stringify({referenceType:'MANUAL',items:[{productId:product.data.id,quantity:0.125}],expiresInMinutes:5})});
+  assert.equal(workerReservation.status,200);await pool.query("UPDATE inventory_reservations SET expires_at=now()-interval '1 minute' WHERE id=$1",[workerReservation.data.id]);
+  const workerExpiry=await runInventoryExpirySweep(pool);assert.equal(workerExpiry.expiredReservations,1);
+  const workerReleased=await call('admin','/admin/inventory/reservations');assert.equal(workerReleased.data.find(x=>x.id===workerReservation.data.id).status,'RELEASED');
+
   const policyUpdate=await call('admin','/admin/inventory/products/'+product.data.id+'/policy',{method:'PUT',body:JSON.stringify({policy:'FIFO'})});
   assert.equal(policyUpdate.status,200);assert.equal(policyUpdate.data.policy,'FIFO');
   const policyRestore=await call('admin','/admin/inventory/products/'+product.data.id+'/policy',{method:'PUT',body:JSON.stringify({policy:'FEFO'})});
