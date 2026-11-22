@@ -264,6 +264,10 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const otherTenantLots=await call('otherAdmin','/admin/inventory/lots');
   assert.equal(otherTenantLots.status,200);assert.equal(otherTenantLots.data.length,0);
   const order=simultaneous[0];
+  const demandPlan=await call('admin','/admin/procurement/demand-plan?deliveryDate='+deliveryDate);
+  assert.equal(demandPlan.status,200);assert.ok(demandPlan.data.lines.some(x=>x.productId===product.data.id&&Number(x.demandQuantity)>0));
+  const invalidDemandDate=await call('admin','/admin/procurement/demand-plan?deliveryDate=2026-02-31');
+  assert.equal(invalidDemandDate.status,422);assert.equal(invalidDemandDate.error.code,'DEMAND_PLAN_DATE_INVALID');
   assert.equal(order.data.fulfilmentStatus,'PLACED');assert.equal(order.data.totalMinor,'17000');
   const replay=await call('customer','/customers/me/orders',orderOptions);
   assert.equal(replay.status,200);assert.equal(replay.data.id,order.data.id);assert.equal(replay.data.idempotentReplay,true);
