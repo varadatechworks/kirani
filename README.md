@@ -12,7 +12,7 @@ Kirani is a traceable grocery sourcing, procurement, processing and fulfilment p
 - **Packaging and traceability:** order-line/package/lot allocation, opaque public trace tokens and recall propagation to affected lots/packages.
 - **Delivery:** capacity-controlled slots, dispatch assignment, operator GPS route start, item-level delivered/refused quantities and partial proof of delivery.
 - **Finance:** externally completed payment reconciliation records, refund request/approval/processed reconciliation, farmer payable accrual from accepted GRN quantity, reason-coded deductions and maker-checker farmer settlement batches.
-- **Loyalty:** versioned effective-dated earning/redemption policy, configurable paise value per point, customer wallet/ledger, point-value snapshots, idempotent redemption and reward accrual gated on delivery plus payment settlement.
+- **Loyalty:** versioned effective-dated earning/redemption policy, configurable paise value per point, customer wallet/ledger, point-value snapshots, expiry-aware FEFO point lots, expiry sweeps, one-level referral codes/rewards, idempotent redemption and reward accrual gated on delivery plus payment settlement.
 - **Engagement:** tenant-scoped in-app notifications/preferences, admin broadcasts, customer support tickets/messages, admin queue and operational report aggregates.
 - **Web experience:** responsive admin, customer, farmer, mill and delivery workspaces, including finance/loyalty, support, reporting and traceability views. Current mobile experiences are responsive web/PWA previews, not native Android/iOS apps.
 
@@ -21,7 +21,7 @@ Kirani is a traceable grocery sourcing, procurement, processing and fulfilment p
 - **Payments:** current finance workflow records a payment that was completed externally (UPI/bank/card/COD/cash). It does not create a Razorpay/other gateway checkout, receive signed provider webhooks or initiate automated refunds.
 - **Farmer payouts:** settlement batches have maker-checker approval and bank/UTR reconciliation, but no live bank payout API.
 - **Notifications:** in-app inbox is implemented. Email, SMS and WhatsApp provider delivery, template approvals and campaign scheduling require provider selection/configuration.
-- **Loyalty:** conversion values are versioned and snapshotted. Refund clawback/debt handling and direct referral rewards remain open; earning lots now support expiry dates, FEFO redemption and expiry sweeps.
+- **Loyalty:** conversion values are versioned and snapshotted. Refund clawback/debt handling remains open; one-level direct referral rewards and expiry-aware FEFO point lots are implemented.
 - **Business/legal:** tax, invoice, sourcing/serviceability, quality, payout and refund policy decisions require Kirani owner/CA/legal confirmation before production.
 - **Release:** no UAT sign-off or production readiness is claimed. See [module completion gates](docs/09-MODULE-COMPLETION-GATES.md) and [decision log](docs/08-DECISIONS-AND-OPEN-ITEMS.md).
 
