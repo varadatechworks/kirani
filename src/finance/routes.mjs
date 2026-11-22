@@ -58,6 +58,13 @@ export async function handleFinanceRoutes(ctx){
  const admin=auth.roles.includes('admin'),farmer=auth.roles.includes('farmer'),customer=auth.roles.includes('customer');
  if(path.startsWith('/api/v1/admin/'))requireRole(auth,'admin');else if(path.startsWith('/api/v1/farmers/'))requireRole(auth,'farmer');else requireRole(auth,'customer');
 
+ if(method==='GET'&&path==='/api/v1/admin/payments/config'){
+  return send(res,{razorpayCheckoutConfigured:Boolean(process.env.RAZORPAY_KEY_ID&&process.env.RAZORPAY_KEY_SECRET),razorpayWebhookConfigured:Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),offlineReconciliationEnabled:true},cid),true;
+ }
+ if(method==='GET'&&path==='/api/v1/admin/payments/events'){
+  const q=await db.query("SELECT event_id,event_type,payload->'payment' AS payment,signature_verified,processed_at,processing_error,created_at FROM payment_gateway_events WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100",[auth.tenantId]);
+  return send(res,q.rows.map(x=>({eventId:x.event_id,eventType:x.event_type,payment:x.payment,signatureVerified:x.signature_verified,processedAt:x.processed_at,processingError:x.processing_error,createdAt:x.created_at})),cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/payments'){
   const q=await db.query('SELECT pt.*,o.customer_id,u.display_name AS customer_name FROM payment_transactions pt JOIN orders o ON o.id=pt.order_id AND o.tenant_id=pt.tenant_id JOIN users u ON u.id=o.customer_id WHERE pt.tenant_id=$1 ORDER BY pt.recorded_at DESC LIMIT 200',[auth.tenantId]);return send(res,q.rows.map(x=>({id:x.id,orderId:x.order_id,customerId:x.customer_id,customerName:x.customer_name,method:x.method,externalReference:x.external_reference,amountMinor:String(x.amount_minor),currency:String(x.currency).trim(),status:x.status,recordedAt:x.recorded_at})),cid),true;
  }
