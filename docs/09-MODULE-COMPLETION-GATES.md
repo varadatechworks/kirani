@@ -163,4 +163,4 @@ Implemented on `feat/phase-1-foundation`:
 - Tenant-scoped in-app notifications, category preferences, admin broadcast by user/role, read receipts, customer support tickets/messages, internal notes, priority/status/assignment, and operations reporting aggregates.
 - Admin finance/loyalty, support and reports workspaces; customer rewards/inbox/support panels; farmer earnings/settlement view.
 
-External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting, loyalty refund clawback/debt is not yet implemented. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
+External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting, loyalty refund clawback/debt are not yet implemented. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
