@@ -14,6 +14,7 @@ import { handlePackingRoutes, handlePublicTrace } from './packing/routes.mjs';
 import { handleDeliveryRoutes } from './delivery/routes.mjs';
 import { handleLoyaltyRoutes } from './loyalty/routes.mjs';
 import { handleEngagementRoutes } from './engagement/routes.mjs';
+import { handleFinanceRoutes } from './finance/routes.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -178,6 +179,7 @@ async function route(req,res,cid){
   if(await handleDeliveryRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handleLoyaltyRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole}))return;
   if(await handleEngagementRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole}))return;
+  if(await handleFinanceRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
