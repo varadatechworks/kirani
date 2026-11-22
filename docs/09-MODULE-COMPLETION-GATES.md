@@ -95,7 +95,7 @@ Snapshot after the customer ordering and farmer procurement implementation commi
 | Goods receipt and quality | 90% | 85% | 90% | GRN posting, partial receipts, accepted/rejected split, reason capture, lot creation and over-receipt protection; UAT excluded |
 | Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
 | Inventory management and lot control | 90% | 88% | 92% | Tenant-scoped lot register/summary, on-hand/reserved/available balances, receipt/opening/adjustment/reserve/release/consume/transfer/quality ledger events, FEFO reservation, whole-lot location transfers, reservation consumption and admin controls; partial transfers, immutable-ledger enforcement, expiry/reconciliation and recall impact workflow remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
-| Delivery slots and proof of delivery | 10% | 0% | 0% | Delivery date selection only; slot capacity, route assignment, delivery scans and POD remain |
+| Delivery slots and proof of delivery | 85% | 80% | 88% | Capacity-controlled date/time slots, operator assignment, GPS route start, item-level delivered/refused quantities, recipient and partial POD, order/package state updates; COD reconciliation, photo/signature evidence, retries, service-area validation and browser E2E remain |
 | Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
 | Farmer payables and settlement | 0% | 0% | 0% | Not started |
 | Loyalty wallet and configurable conversion | 0% | 0% | 0% | Not started |
@@ -141,3 +141,15 @@ Implemented on `feat/phase-1-foundation`:
 Latest verified automated inventory integration run for the expiry/partial-transfer/reconciliation changes: [Kirani CI run 44992266010](https://github.com/varadatechworks/kirani/actions/runs/44992266010) — 16 tests passed, migrations and syntax checks passed. The subsequent recall ancestry enhancement is undergoing its own CI run. UAT has not been performed.
 
 Remaining gates before 98%: browser-level end-to-end tests, full tenant/role matrix, multi-stage rework and correction workflows, scheduled reservation-expiry execution, print-ready QR labels/customer trace page, and extended concurrency/recall scenarios.
+
+
+## Delivery implementation update
+
+Implemented on `feat/phase-1-foundation`:
+- Admin can create dated delivery slots with start/end times, cutoff and capacity.
+- Dispatch assignment requires a packed package, an active delivery-operator account and remaining slot capacity. An order cannot have two concurrent active assignments.
+- Delivery operators see only their own assignments, capture GPS at route start and submit item-level proof of delivery with recipient, delivered/refused quantities and short-delivery reasons.
+- Partial deliveries preserve the outstanding order quantity and can be assigned again when additional packed quantities are available; POD quantities are capped by both remaining order quantity and packed quantity.
+- Delivery events, GPS coordinates, POD records and order/package state changes are persisted and audited.
+
+Automated CI covering the delivery slot, assignment, GPS start and partial-POD workflow passed in [Kirani CI run 44992914651](https://github.com/varadatechworks/kirani/actions/runs/44992914651) (16 tests passed). Follow-up inventory reservation/recall hardening is being checked in a newer CI run. UAT has not been performed.
