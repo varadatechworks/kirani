@@ -14,7 +14,7 @@ import { handlePackingRoutes, handlePublicTrace } from './packing/routes.mjs';
 import { handleDeliveryRoutes } from './delivery/routes.mjs';
 import { handleLoyaltyRoutes } from './loyalty/routes.mjs';
 import { handleEngagementRoutes } from './engagement/routes.mjs';
-import { handleFinanceRoutes } from './finance/routes.mjs';
+import { handleFinanceRoutes, handleRazorpayWebhook } from './finance/routes.mjs';
 import { createRateLimiter } from './security/rate-limit.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -26,6 +26,7 @@ class HttpError extends Error { constructor(status,code,message){super(message);
 const fail=(status,code,message)=>{throw new HttpError(status,code,message)};
 const send=(res,statusOrData,dataOrCid,cid)=>{const status=typeof statusOrData==='number'?statusOrData:200;const data=typeof statusOrData==='number'?dataOrCid:statusOrData;const correlation=typeof statusOrData==='number'?cid:dataOrCid;res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify({data,meta:{correlationId:correlation,version:'v1'}}));};
 const sendError=(res,error,cid)=>{const status=error instanceof HttpError?error.status:error?.code==='23505'?409:error?.code==='23503'||error?.code==='22P02'?422:500;const code=error instanceof HttpError?error.code:error?.code==='23505'?'DUPLICATE_RECORD':error?.code==='23503'||error?.code==='22P02'?'DATA_VALIDATION':'INTERNAL_ERROR';const messages={400:'Please check the submitted information.',401:'Please sign in again.',403:'You do not have permission for this action.',404:'We could not find that record.',409:'This record changed or the requested action conflicts with its current state.',413:'The submitted request is too large.',415:'Please submit JSON data.',422:'The information does not meet the business rules.',429:'Too many requests. Please try again shortly.',500:'Something went wrong. Please try again.',503:'Kirani services are temporarily unavailable.'};res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify({error:{code,message:error instanceof HttpError?error.message:(messages[status]??messages[500]),fieldErrors:[],correlationId:cid}}));};
+const rawBody=async req=>{const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1_000_000)fail(413,'BODY_TOO_LARGE','Request body exceeds 1 MB.');chunks.push(chunk);}return Buffer.concat(chunks);};
 const bodyJson=async req=>{if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']??''))fail(415,'JSON_REQUIRED','Please submit this form as JSON.');let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1_000_000)fail(413,'BODY_TOO_LARGE','Request body exceeds 1 MB.');}if(!raw)return {};try{return JSON.parse(raw);}catch{fail(400,'INVALID_JSON','Request body must be valid JSON.');}};
 const requireDb=()=>{if(!pool)fail(503,'DATABASE_NOT_CONFIGURED','Database connection is not configured.');return pool;};
 const requireRole=(auth,...roles)=>{if(!roles.some(role=>auth.roles.includes(role)))fail(403,'FORBIDDEN','Your account does not have access to this workspace.');};
@@ -63,7 +64,7 @@ async function route(req,res,cid){
     res.writeHead(200,{'content-type':types[extname(file)],'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});return res.end(content);
   }
   if(!path.startsWith('/api/v1/'))fail(404,'NOT_FOUND','That page is not available.');
-  const publicDb=requireDb();if(await handlePublicTrace({req,res,cid,path,method,db:publicDb,send,fail}))return;
+  const publicDb=requireDb();if(await handlePublicTrace({req,res,cid,path,method,db:publicDb,send,fail}))return;if(await handleRazorpayWebhook({req,res,cid,path,method,db:publicDb,transaction,send,fail,rawBody}))return;
   const auth=await authenticate(req);const db=requireDb();
 
   if(method==='GET'&&path==='/api/v1/session/me')return send(res,{id:auth.userId,tenantId:auth.tenantId,displayName:auth.displayName,email:auth.email,phone:auth.phone,locale:auth.locale,roles:auth.roles},cid);
