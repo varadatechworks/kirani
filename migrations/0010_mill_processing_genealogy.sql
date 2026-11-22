@@ -1,4 +1,6 @@
 BEGIN;
+ALTER TABLE inventory_ledger DROP CONSTRAINT IF EXISTS inventory_ledger_event_type_check;
+ALTER TABLE inventory_ledger ADD CONSTRAINT inventory_ledger_event_type_check CHECK(event_type IN ('OPENING','RECEIPT','ADJUSTMENT_IN','ADJUSTMENT_OUT','RESERVE','RELEASE','CONSUME','TRANSFER_IN','TRANSFER_OUT','QUALITY_HOLD','QUALITY_RELEASE','RECALL','PROCESSING_OUTPUT'));
 ALTER TABLE inventory_lots ALTER COLUMN goods_receipt_item_id DROP NOT NULL;
 ALTER TABLE inventory_lots ADD COLUMN IF NOT EXISTS processing_output_id uuid UNIQUE;
 ALTER TABLE inventory_lots ADD CONSTRAINT inventory_lots_source_xor_check CHECK ((goods_receipt_item_id IS NOT NULL)::int + (processing_output_id IS NOT NULL)::int = 1);
