@@ -59,6 +59,17 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(poResponse.status,200);assert.equal(poResponse.data.status,'ACCEPTED');
   const allocated=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
   assert.equal(allocated,'8.000');
+  const firstReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-CI-'+randomUUID(),notes:'First partial receipt',items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:7,quantityQualityAccepted:6,quantityRejected:1,rejectionReason:'Moisture above accepted threshold',lotCode:'LOT-CI-'+randomUUID()}]})});
+  assert.equal(firstReceipt.status,200);assert.equal(firstReceipt.data.purchaseOrderStatus,'PARTIALLY_RECEIVED');
+  const secondReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-CI-'+randomUUID(),items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:1,quantityQualityAccepted:1,quantityRejected:0,lotCode:'LOT-CI-'+randomUUID()}]})});
+  assert.equal(secondReceipt.status,200);assert.equal(secondReceipt.data.purchaseOrderStatus,'RECEIVED');
+  const receipts=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts');
+  assert.equal(receipts.status,200);assert.equal(receipts.data.length,2);
+  const stock=(await pool.query('SELECT count(*)::int AS lots,COALESCE(sum(quantity_available),0)::text AS available FROM inventory_lots WHERE tenant_id=$1',[tenant])).rows[0];
+  assert.equal(stock.lots,2);assert.equal(stock.available,'7.000');
+  const overReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-OVER-'+randomUUID(),items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:1,quantityQualityAccepted:1,quantityRejected:0,lotCode:'LOT-OVER-'+randomUUID()}]})});
+  assert.equal(overReceipt.status,409);
+
 
 
   const catalogue=await call('customer','/catalogue/products');
