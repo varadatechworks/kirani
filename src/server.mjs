@@ -63,7 +63,7 @@ async function route(req,res,cid){
     if(!pool)fail(503,'DATABASE_NOT_CONFIGURED','Database connection is not configured.');
     try{await pool.query('SELECT 1');return send(res,200,{status:'ready',database:'connected'},cid);}catch{fail(503,'DATABASE_UNAVAILABLE','Database is not reachable.');}
   }
-  const publicTracePage=path.match(/^\\/trace\\/([0-9a-f-]{36})$/i);
+  const publicTracePage=path.match(/^\/trace\/([0-9a-f-]{36})$/i);
   if(method==='GET'&&publicTracePage){
     const content=await readFile(resolve(root,'trace.html'));
     res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});
