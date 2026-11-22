@@ -100,7 +100,7 @@ Snapshot after the customer ordering and farmer procurement implementation commi
 | Procurement purchase orders | 85% | 80% | 83% | Admin PO issue, farmer accept/reject, partial accepted quantity and allocation release |
 | Goods receipt and quality | 90% | 85% | 90% | GRN posting, partial receipts, accepted/rejected split, reason capture, lot creation and over-receipt protection; UAT excluded |
 | Mill processing and batch genealogy | 0% | 0% | 0% | Not started |
-| Inventory lot visibility | 65% | 75% | 70% | Tenant-scoped lot register and per-product available stock summary; reservations, movements, adjustments, FEFO and recall controls remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
+| Inventory management and lot control | 82% | 80% | 88% | Tenant-scoped lot register/summary, on-hand/reserved/available balances, audited stock ledger, count adjustments, FEFO lot reservation, idempotent reservation replay, release, quality quarantine/release/recall and admin controls; location transfers, reservation consumption, full ledger reconciliation and recall impact workflow remain |\n| Packaging and QR traceability | 0% | 0% | 0% | Not started |
 | Delivery slots and proof of delivery | 10% | 0% | 0% | Delivery date selection only; slot capacity and dispatch remain |
 | Payments, refunds and reconciliation | 0% | 0% | 0% | Provider onboarding and payment ledger not implemented |
 | Farmer payables and settlement | 0% | 0% | 0% | Not started |
@@ -110,4 +110,21 @@ Snapshot after the customer ordering and farmer procurement implementation commi
 | Production identity, security and operations | 45% | 35% | 40% | JWT/tenant controls, correlation IDs and CI exist; MFA, provider integration, threat review and production operations remain |
 | Native Android and iOS apps | 0% | 0% | 0% | Current mobile experiences are responsive browser previews, not native apps |
 
-**Overall product development is still below 50%.** The next target is to bring each active module to at least 95% development completion before starting its UAT sign-off. A product-wide 95% figure cannot be claimed while goods receipt, processing, inventory, traceability, finance, loyalty, notifications and native apps remain unimplemented.
+**Overall product development is still below 50%.** Inventory management has advanced but is not yet at the requested 98% gate. The next target is to close the remaining inventory gaps, then complete processing and batch genealogy before packaging/QR and delivery. A product-wide 95% figure cannot be claimed while processing, traceability, finance, loyalty, notifications and native apps remain unimplemented.
+
+
+## Inventory control implementation update
+
+Implemented on `feat/phase-1-foundation`:
+- Append-only inventory movement ledger with opening balances and goods-receipt entries.
+- Explicit on-hand, reserved and available balances with a database consistency constraint.
+- Audited positive/negative stock adjustments with protection against reducing on-hand below reserved stock.
+- FEFO reservation allocation across oldest eligible lots, transactional row locks and idempotent replay.
+- Reservation register and reason-required release workflow.
+- Lot quality transitions for available, quarantined and recalled stock; held/recalled lots are excluded from available-stock summaries, and lots with active reservations cannot be held or recalled.
+- Admin workspace for stock adjustment, reservation, release, lot quality actions and ledger review.
+- PostgreSQL integration coverage for reservation replay, balance changes, release, invalid negative adjustment, quality hold/release, ledger events and role denial.
+
+Latest verified CI: [Kirani CI run 44985811780](https://github.com/varadatechworks/kirani/actions/runs/44985811780) — migration and `npm run check` succeeded. UAT has not been performed.
+
+Remaining inventory work before 98%: location lifecycle and transfers, reservation consumption/issue, reservation expiry and reconciliation, recall impact/trace-back workflow, deeper concurrent-write and tenant-isolation tests, and browser-level verification of the admin controls.
