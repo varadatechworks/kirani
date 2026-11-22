@@ -6,6 +6,7 @@ import { pool } from './db/pool.mjs';
 import { bearerToken, verifyAccessToken } from './security/jwt.mjs';
 import { correlationId } from './shared/skeleton/observability.mjs';
 import { handleOrderRoutes } from './orders/routes.mjs';
+import { handleFarmerProcurementRoutes } from './procurement/routes.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -161,6 +162,7 @@ async function route(req,res,cid){
   }
 
   if(await handleOrderRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
+  if(await handleFarmerProcurementRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
