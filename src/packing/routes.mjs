@@ -30,7 +30,7 @@ export async function handlePublicTrace(ctx){
 export async function handlePackingRoutes(ctx){
  const {req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole}=ctx;
  if(!path.startsWith('/api/v1/admin/packing/'))return false;requireRole(auth,'admin');
- const labelMatch=path.match(/^\\/api\\/v1\\/admin\\/packing\\/packages\\/([0-9a-f-]{36})\\/label$/i);
+ const labelMatch=path.match(/^\/api\/v1\/admin\/packing\/packages\/([0-9a-f-]{36})\/label$/i);
  if(method==='GET'&&labelMatch){
   const base=process.env.PUBLIC_APP_URL;
   if(!base)fail(503,'PUBLIC_APP_URL_NOT_CONFIGURED','Public application URL must be configured before printing QR labels.');
