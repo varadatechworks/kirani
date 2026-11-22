@@ -141,7 +141,7 @@ async function route(req,res,cid){
 
   if(method==='GET'&&path==='/api/v1/farmers/me/listings'){
     requireRole(auth,'farmer');const r=await db.query('SELECT fl.*,p.name AS product_name,p.sku FROM farmer_listings fl JOIN products p ON p.id=fl.product_id WHERE fl.tenant_id=$1 AND fl.farmer_id=$2 ORDER BY fl.created_at DESC LIMIT 100',[auth.tenantId,auth.userId]);
-    return send(res,r.rows.map(x=>({id:x.id,productId:x.product_id,productName:x.product_name,sku:x.sku,availableQuantity:x.available_quantity,unitCode:x.unit_code,priceMinor:x.price_minor===null?null:String(x.price_minor),status:x.status,reviewNote:x.review_note,createdAt:x.created_at})),cid);
+    return send(res,r.rows.map(x=>({id:x.id,productId:x.product_id,productName:x.product_name,sku:x.sku,availableQuantity:x.available_quantity,allocatedQuantity:x.allocated_quantity??0,unitCode:x.unit_code,priceMinor:x.price_minor===null?null:String(x.price_minor),status:x.status,reviewNote:x.review_note,createdAt:x.created_at})),cid);
   }
   if(method==='POST'&&path==='/api/v1/farmers/me/listings'){
     requireRole(auth,'farmer');const b=await bodyJson(req);
