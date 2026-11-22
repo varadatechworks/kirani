@@ -60,8 +60,11 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(preview.status,200);assert.equal(preview.data.items.length,1);assert.equal(preview.data.totalMinor,'17000');
   const idempotencyKey='ci-order-'+randomUUID();
   const orderOptions={method:'POST',headers:{'idempotency-key':idempotencyKey},body:JSON.stringify({cycleId:cycle,addressId:address.data.id,deliveryDate})};
-  const order=await call('customer','/customers/me/orders',orderOptions);
-  assert.equal(order.status,200);assert.equal(order.data.fulfilmentStatus,'PLACED');assert.equal(order.data.totalMinor,'17000');
+  const simultaneous=await Promise.all([call('customer','/customers/me/orders',orderOptions),call('customer','/customers/me/orders',orderOptions)]);
+  assert.equal(simultaneous.every(x=>x.status===200),true);assert.equal(simultaneous[0].data.id,simultaneous[1].data.id);
+  assert.equal(simultaneous.filter(x=>x.data.idempotentReplay).length,1);
+  const order=simultaneous[0];
+  assert.equal(order.data.fulfilmentStatus,'PLACED');assert.equal(order.data.totalMinor,'17000');
   const replay=await call('customer','/customers/me/orders',orderOptions);
   assert.equal(replay.status,200);assert.equal(replay.data.id,order.data.id);assert.equal(replay.data.idempotentReplay,true);
   const orderDetail=await call('customer','/orders/'+order.data.id);
