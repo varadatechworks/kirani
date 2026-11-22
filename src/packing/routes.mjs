@@ -1,8 +1,8 @@
-const milli=v=>{const s=String(v);if(!/^\\d+(?:\\.\\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
+const milli=v=>{const s=String(v);if(!/^\d+(?:\.\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
 const qty=n=>Number(n)/1000;
 export async function handlePublicTrace(ctx){
  const {res,cid,path,method,db,send,fail}=ctx;
- const match=path.match(/^\\/api\\/v1\\/public\\/trace\\/([0-9a-f-]{36})$/i);
+ const match=path.match(/^\/api\/v1\/public\/trace\/([0-9a-f-]{36})$/i);
  if(!match||method!=='GET')return false;
  const token=match[1];const p=await db.query('SELECT p.id,p.package_number,p.status,p.packed_at,o.currency FROM packages p JOIN orders o ON o.id=p.order_id AND o.tenant_id=p.tenant_id WHERE p.public_token=$1',[token]);
  if(!p.rowCount)fail(404,'TRACE_NOT_FOUND','This package trace is unavailable or the code is invalid.');
