@@ -286,6 +286,16 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const packageLabel=await call('admin','/admin/packing/packages/'+packed.data.id+'/label');assert.equal(packageLabel.status,200);assert.match(packageLabel.data.qrSvg,/<svg/);assert.match(packageLabel.data.traceUrl,/https:\/\/kirani\.test\/trace\//);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
   const tracePage=await fetch(base+packed.data.tracePath.replace('/api/v1/public/trace/','/trace/'));assert.equal(tracePage.status,200);assert.match(await tracePage.text(),/Product trace/);
+  const exportFrom=new Date().toISOString().slice(0,10),exportQuery='from='+exportFrom+'&to='+exportFrom;
+  const operationsCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
+  assert.equal(operationsCsv.status,200);assert.match(operationsCsv.headers.get('content-type'),/text\\/csv/);assert.match(await operationsCsv.text(),new RegExp(order.data.id));
+  const financeCsv=await fetch(base+'/api/v1/admin/reports/export?type=finance&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
+  assert.equal(financeCsv.status,200);assert.match(await financeCsv.text(),/CAPTURE/);
+  const traceCsv=await fetch(base+'/api/v1/admin/reports/export?type=traceability&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
+  assert.equal(traceCsv.status,200);assert.match(await traceCsv.text(),new RegExp(packed.data.packageNumber));
+  const otherTenantCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.otherAdmin,accept:'text/csv'}});
+  assert.equal(otherTenantCsv.status,200);assert.doesNotMatch(await otherTenantCsv.text(),new RegExp(order.data.id));
+
   const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
   const slot=await call('admin','/admin/delivery/slots',{method:'POST',body:JSON.stringify({slotCode:'CI-AM-'+randomUUID().slice(0,5),deliveryDate:new Date(Date.now()+86400000).toISOString().slice(0,10),startsAt:'09:00',endsAt:'11:00',capacity:5,cutoffAt:new Date(Date.now()+3600000).toISOString()})});
   assert.equal(slot.status,200);
