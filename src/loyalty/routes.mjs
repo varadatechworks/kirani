@@ -6,7 +6,7 @@ export async function handleLoyaltyRoutes(ctx){
  if(method==='GET'&&path==='/api/v1/admin/loyalty/policies'){
   const q=await db.query('SELECT * FROM loyalty_policies WHERE tenant_id=$1 ORDER BY version DESC',[auth.tenantId]);return send(res,q.rows.map(x=>({id:x.id,version:x.version,effectiveFrom:x.effective_from,effectiveTo:x.effective_to,pointsPerRupee:x.points_per_rupee,pointValuePaise:x.point_value_paise,redemptionCapBps:x.redemption_cap_bps,minimumRedemptionPoints:x.minimum_redemption_points,maximumRedemptionPoints:x.maximum_redemption_points,status:x.status})),cid),true;
  }
- const closePolicy=path.match(/^\\/api\\/v1\\/admin\\/loyalty\\/policies\\/([0-9a-f-]+)\\/close$/i);
+ const closePolicy=path.match(new RegExp("^/api/v1/admin/loyalty/policies/([0-9a-f-]+)/close$","i"));
  if(method==='POST'&&closePolicy){
   if(!validId.test(closePolicy[1]))fail(404,'LOYALTY_POLICY_NOT_FOUND','Loyalty policy was not found.');
   const b=await bodyJson(req);if(typeof b.effectiveTo!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(b.effectiveTo))fail(422,'LOYALTY_POLICY_END_DATE_INVALID','Provide a valid policy end date.');
