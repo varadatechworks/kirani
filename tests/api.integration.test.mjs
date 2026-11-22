@@ -78,6 +78,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const reserveOptions={method:'POST',headers:{'idempotency-key':reservationKey},body:JSON.stringify({referenceType:'MANUAL',referenceId:'CI-CYCLE',items:[{productId:product.data.id,quantity:2}]})};
   const reservation=await call('admin','/admin/inventory/reservations',reserveOptions);
   assert.equal(reservation.status,200);assert.equal(reservation.data.status,'ACTIVE');assert.equal(reservation.data.replayed,false);
+  const reservationRegister=await call('admin','/admin/inventory/reservations');
+  assert.equal(reservationRegister.status,200);assert.ok(reservationRegister.data.some(x=>x.id===reservation.data.id));
   const reservationReplay=await call('admin','/admin/inventory/reservations',reserveOptions);
   assert.equal(reservationReplay.status,200);assert.equal(reservationReplay.data.id,reservation.data.id);assert.equal(reservationReplay.data.replayed,true);
   const reservedSummary=await call('admin','/admin/inventory/summary');
