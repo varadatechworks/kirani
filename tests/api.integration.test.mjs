@@ -286,11 +286,9 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const packageLabel=await call('admin','/admin/packing/packages/'+packed.data.id+'/label');assert.equal(packageLabel.status,200);assert.match(packageLabel.data.qrSvg,/<svg/);assert.match(packageLabel.data.traceUrl,/https:\/\/kirani\.test\/trace\//);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
   const tracePage=await fetch(base+packed.data.tracePath.replace('/api/v1/public/trace/','/trace/'));assert.equal(tracePage.status,200);assert.match(await tracePage.text(),/Product trace/);
-  const exportFrom=new Date().toISOString().slice(0,10),exportQuery='from='+exportFrom+'&to='+exportFrom;
+  const exportFrom=new Date(Date.now()-30*86400000).toISOString().slice(0,10),exportQuery='from='+exportFrom+'&to='+new Date().toISOString().slice(0,10);
   const operationsCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
   assert.equal(operationsCsv.status,200);assert.ok(operationsCsv.headers.get('content-type').includes('text/csv'));assert.match(await operationsCsv.text(),new RegExp(order.data.id));
-  const financeCsv=await fetch(base+'/api/v1/admin/reports/export?type=finance&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
-  assert.equal(financeCsv.status,200);assert.match(await financeCsv.text(),/CAPTURE/);
   const traceCsv=await fetch(base+'/api/v1/admin/reports/export?type=traceability&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
   assert.equal(traceCsv.status,200);assert.match(await traceCsv.text(),new RegExp(packed.data.packageNumber));
   const otherTenantCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.otherAdmin,accept:'text/csv'}});
@@ -349,6 +347,9 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const gatewaySignature=createHmac('sha256','ci-razorpay-webhook-secret').update(gatewayBody).digest('hex');
   const gatewayWebhook=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
   assert.equal(gatewayWebhook.status,200);const gatewayResult=(await gatewayWebhook.json()).data;assert.equal(gatewayResult.paymentStatus,'PAID',JSON.stringify(gatewayResult));
+  const financeCsv=await fetch(base+'/api/v1/admin/reports/export?type=finance&'+exportQuery,{headers:{authorization:'Bearer '+tokens.admin,accept:'text/csv'}});
+  assert.equal(financeCsv.status,200);assert.match(await financeCsv.text(),/CAPTURE/);
+
   const gatewayEvents=await call('admin','/admin/payments/events');assert.equal(gatewayEvents.status,200);assert.ok(gatewayEvents.data.some(x=>x.eventType==='payment.captured'&&x.signatureVerified));
   const gatewayReplay=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
   assert.equal(gatewayReplay.status,200);assert.equal((await gatewayReplay.json()).data.replayed,true);
