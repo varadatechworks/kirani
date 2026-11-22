@@ -21,7 +21,7 @@ Kirani is a traceable grocery sourcing, procurement, processing and fulfilment p
 - **Payments:** current finance workflow records a payment that was completed externally (UPI/bank/card/COD/cash). It does not create a Razorpay/other gateway checkout, receive signed provider webhooks or initiate automated refunds.
 - **Farmer payouts:** settlement batches have maker-checker approval and bank/UTR reconciliation, but no live bank payout API.
 - **Notifications:** in-app inbox is implemented. Email, SMS and WhatsApp provider delivery, template approvals and campaign scheduling require provider selection/configuration.
-- **Loyalty:** conversion values are versioned and snapshotted. Expiry lots, refund clawback/debt handling and referral rewards remain open.
+- **Loyalty:** conversion values are versioned and snapshotted. Refund clawback/debt handling and direct referral rewards remain open; earning lots now support expiry dates, FEFO redemption and expiry sweeps.
 - **Business/legal:** tax, invoice, sourcing/serviceability, quality, payout and refund policy decisions require Kirani owner/CA/legal confirmation before production.
 - **Release:** no UAT sign-off or production readiness is claimed. See [module completion gates](docs/09-MODULE-COMPLETION-GATES.md) and [decision log](docs/08-DECISIONS-AND-OPEN-ITEMS.md).
 
@@ -53,7 +53,7 @@ All authenticated API routes are under `/api/v1`. Send `Authorization: Bearer <a
 | Delivery | `POST /admin/delivery/slots`, `POST /admin/delivery/assignments`, `GET /delivery/assignments`, `POST /delivery/assignments/:id/pod` |
 | Payments/refunds | `POST /admin/orders/:id/payments/record`, `GET /customers/me/orders/:id/payments`, `POST /customers/me/refund-requests`, `POST /admin/refunds/:id/decision`, `POST /admin/refunds/:id/record-processed` |
 | Farmer settlements | `GET /admin/farmer-payables`, `POST /admin/farmer-settlements`, `POST /admin/farmer-settlements/:id/approve`, `POST /admin/farmer-settlements/:id/record-paid`, `GET /farmers/me/settlements` |
-| Loyalty | `GET|POST /admin/loyalty/policies`, `GET /customers/me/loyalty`, `POST /customers/me/loyalty/redeem`, `POST /admin/loyalty/orders/:id/earn` |
+| Loyalty | `GET|POST /admin/loyalty/policies`, `GET /customers/me/loyalty`, `POST /customers/me/loyalty/redeem`, `POST /admin/loyalty/orders/:id/earn`, `POST /admin/loyalty/expire` |
 | Notifications/support/reports | `GET /customers/me/notifications`, `POST /admin/notifications`, `POST /customers/me/support`, `GET /admin/support`, `GET /admin/reports/operations` |
 
 ## Verification
