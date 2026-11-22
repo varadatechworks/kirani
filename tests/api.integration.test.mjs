@@ -70,7 +70,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(overlappingPolicy.status,409);assert.equal(overlappingPolicy.error.code,'LOYALTY_POLICY_DATE_OVERLAP');
 
   const notification=await call('admin','/admin/notifications',{method:'POST',body:JSON.stringify({category:'SYSTEM',title:'Kirani test notice',body:'Notification inbox integration test',roles:['customer']})});
-  assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,1);
+  assert.equal(notification.status,200);assert.equal(notification.data.recipientCount,2);
   const inbox=await call('customer','/customers/me/notifications');
   assert.equal(inbox.status,200);assert.ok(inbox.data.some(x=>x.title==='Kirani test notice'));
   const notice=inbox.data.find(x=>x.title==='Kirani test notice');
