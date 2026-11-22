@@ -79,6 +79,27 @@ export async function handleEngagementRoutes(ctx){
    db.query("SELECT count(*)::int AS jobs,count(*) FILTER(WHERE status='COMPLETED')::int AS completed,count(*) FILTER(WHERE status IN ('QC_PENDING','RECONCILIATION_PENDING','REJECTED'))::int AS blocked FROM processing_jobs WHERE tenant_id=$1",[auth.tenantId])
   ]);return send(res,{inventoryLots:lots.rows[0],packages:packages.rows[0],recalls:recalls.rows[0],processing:processing.rows[0],generatedAt:new Date().toISOString()},cid),true;
  }
+ if(method==='GET'&&path==='/api/v1/admin/reports/export'){
+  const params=new URL(req.url,'http://kirani.local').searchParams,type=params.get('type')||'operations';
+  const from=params.get('from')||new Date(Date.now()-29*86400000).toISOString().slice(0,10),to=params.get('to')||new Date().toISOString().slice(0,10);
+  const validDate=x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString().slice(0,10)===x;
+  if(!['operations','finance','traceability'].includes(type)||!validDate(from)||!validDate(to)||from>to)fail(422,'REPORT_EXPORT_FILTER_INVALID','Choose a supported report and a valid date range.');
+  let columns,rows;
+  if(type==='operations'){
+   columns=['order_id','delivery_date','created_at','fulfilment_status','payment_status','subtotal_minor','discount_minor','tax_minor','total_minor','currency'];
+   const q=await db.query('SELECT id,delivery_date::text,created_at,fulfilment_status,payment_status,subtotal_minor::text,discount_minor::text,tax_minor::text,total_minor::text,currency FROM orders WHERE tenant_id=$1 AND created_at >= $2::date AND created_at < $3::date + interval \'1 day\' ORDER BY created_at',[auth.tenantId,from,to]);rows=q.rows;
+  }else if(type==='finance'){
+   columns=['entry_id','order_id','transaction_id','entry_type','amount_minor','external_reference','reason','created_at'];
+   const q=await db.query('SELECT id AS entry_id,order_id,payment_transaction_id AS transaction_id,entry_type,amount_minor::text,external_reference,reason,created_at FROM payment_ledger WHERE tenant_id=$1 AND created_at >= $2::date AND created_at < $3::date + interval \'1 day\' ORDER BY created_at',[auth.tenantId,from,to]);rows=q.rows;
+  }else{
+   columns=['package_number','order_id','package_status','packed_at','product_name','quantity','unit_code','lot_code','lot_status','allocated_quantity'];
+   const q=await db.query('SELECT p.package_number,p.order_id,p.status AS package_status,p.packed_at,pr.name AS product_name,pi.quantity::text,pi.unit_code,il.lot_code,il.status AS lot_status,pba.quantity::text AS allocated_quantity FROM packages p JOIN package_items pi ON pi.package_id=p.id AND pi.tenant_id=p.tenant_id JOIN products pr ON pr.id=pi.product_id AND pr.tenant_id=pi.tenant_id LEFT JOIN package_batch_allocations pba ON pba.package_item_id=pi.id AND pba.tenant_id=pi.tenant_id LEFT JOIN inventory_lots il ON il.id=pba.inventory_lot_id AND il.tenant_id=pba.tenant_id WHERE p.tenant_id=$1 AND p.packed_at >= $2::date AND p.packed_at < $3::date + interval \'1 day\' ORDER BY p.packed_at,p.package_number',[auth.tenantId,from,to]);rows=q.rows;
+  }
+  const cell=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+  const csv=[columns.join(','),...rows.map(row=>columns.map(key=>cell(row[key])).join(','))].join('\\r\\n');
+  res.writeHead(200,{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="kirani-'+type+'-'+from+'-'+to+'.csv"','cache-control':'no-store','x-content-type-options':'nosniff'});
+  res.end(csv);return true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/reports/operations'){
   const [orders,procurement,inventory,delivery,tickets]=await Promise.all([
    db.query('SELECT count(*)::int AS total,count(*) FILTER(WHERE fulfilment_status NOT IN (\'CANCELLED\',\'DELIVERED\'))::int AS open,count(*) FILTER(WHERE fulfilment_status=\'DELIVERED\')::int AS delivered,COALESCE(sum(total_minor) FILTER(WHERE fulfilment_status<>\'CANCELLED\'),0)::text AS order_value_minor FROM orders WHERE tenant_id=$1',[auth.tenantId]),
