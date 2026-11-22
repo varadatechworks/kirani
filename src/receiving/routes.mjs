@@ -1,6 +1,6 @@
 const milli=v=>{const s=String(v);if(!/^\d+(?:\.\d{1,3})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000n+BigInt((f+'000').slice(0,3));};
 export async function handleGoodsReceiptRoutes(ctx){
- const {req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}=ctx;
+ const {req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}=ctx;
  if(method==='GET'&&path==='/api/v1/admin/inventory/lots'){
   requireRole(auth,'admin');const status=url.searchParams.get('status');const allowed=['AVAILABLE','QUARANTINED','DEPLETED','RECALLED'];if(status&&!allowed.includes(status))fail(422,'INVENTORY_FILTER_INVALID','Choose a valid inventory status.');
   const q=await db.query(`SELECT il.*,p.name AS product_name,p.sku FROM inventory_lots il JOIN products p ON p.id=il.product_id AND p.tenant_id=il.tenant_id WHERE il.tenant_id=$1 AND ($2::text IS NULL OR il.status=$2) ORDER BY il.received_at DESC LIMIT 200`,[auth.tenantId,status||null]);
