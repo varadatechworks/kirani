@@ -69,6 +69,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(stock.lots,2);assert.equal(stock.available,'7.000');
   const overReceipt=await call('admin','/admin/procurement/orders/'+po.data.id+'/receipts',{method:'POST',body:JSON.stringify({receiptNumber:'GRN-OVER-'+randomUUID(),items:[{procurementOrderItemId:po.data.items[0].id,quantityReceived:1,quantityQualityAccepted:1,quantityRejected:0,lotCode:'LOT-OVER-'+randomUUID()}]})});
   assert.equal(overReceipt.status,409);
+  const inventoryLots=await call('admin','/admin/inventory/lots?status=AVAILABLE');
+  assert.equal(inventoryLots.status,200);assert.equal(inventoryLots.data.length,2);
+  const inventorySummary=await call('admin','/admin/inventory/summary');
+  assert.equal(inventorySummary.status,200);assert.equal(inventorySummary.data[0].availableQuantity,'7.000');
+  const customerInventory=await call('customer','/admin/inventory/lots');
+  assert.equal(customerInventory.status,403);
+
 
 
 
