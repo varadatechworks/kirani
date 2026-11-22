@@ -16,7 +16,8 @@ test('rate limiter keys trusted forwarded addresses only when proxy trust is ena
  const trusted=createRateLimiter({limit:1,windowMs:1000,trustProxy:true});
  const untrusted=createRateLimiter({limit:1,windowMs:1000,trustProxy:false});
  assert.equal(trusted.consume(req,1000).allowed,true);
- assert.equal(trusted.consume({...req,socket:{remoteAddress:'10.0.0.3'}},1001).allowed,true);
+ assert.equal(trusted.consume({...req,socket:{remoteAddress:'10.0.0.3'}},1001).allowed,false);
  assert.equal(untrusted.consume(req,1000).allowed,true);
- assert.equal(untrusted.consume({...req,socket:{remoteAddress:'10.0.0.2'}},1001).allowed,false);
+ assert.equal(untrusted.consume({...req,socket:{remoteAddress:'10.0.0.3'}},1001).allowed,true);
+ assert.equal(untrusted.consume({...req,socket:{remoteAddress:'10.0.0.2'}},1002).allowed,false);
 });
