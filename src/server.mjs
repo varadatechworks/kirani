@@ -175,7 +175,7 @@ async function route(req,res,cid){
 }
 const server=http.createServer(async(req,res)=>{
   const cid=correlationId(req.headers['x-correlation-id']);res.setHeader('x-correlation-id',cid);res.setHeader('x-content-type-options','nosniff');res.setHeader('referrer-policy','strict-origin-when-cross-origin');res.setHeader('permissions-policy','camera=(), microphone=(), geolocation=()');res.setHeader('cache-control','no-store');
-  try{await route(req,res,cid);}catch(error){if(!(error instanceof HttpError))process.stderr.write(JSON.stringify({event:'request_failed',correlationId:cid,message:error?.message??'unknown'})+'\n');if(!res.headersSent)sendError(res,error,cid);else res.destroy();}
+  try{await route(req,res,cid);}catch(error){if(!(error instanceof HttpError))process.stderr.write(JSON.stringify({event:'request_failed',correlationId:cid,errorCode:error?.code??'INTERNAL_ERROR',errorType:error?.name??'Error'})+'\\n');if(!res.headersSent)sendError(res,error,cid);else res.destroy();}
 });
 server.listen(port,'0.0.0.0',()=>process.stdout.write(JSON.stringify({event:'server_started',port})+'\n'));
 const shutdown=()=>server.close(async()=>{if(pool)await pool.end();process.exit(0);});
