@@ -11,6 +11,7 @@ import { handleGoodsReceiptRoutes } from './receiving/routes.mjs';
 import { handleInventoryRoutes } from './inventory/routes.mjs';
 import { handleProcessingRoutes } from './processing/routes.mjs';
 import { handlePackingRoutes, handlePublicTrace } from './packing/routes.mjs';
+import { handleDeliveryRoutes } from './delivery/routes.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -172,6 +173,7 @@ async function route(req,res,cid){
   if(await handleInventoryRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handleProcessingRoutes({req,res,cid,path,method,auth,db,url,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
   if(await handlePackingRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
+  if(await handleDeliveryRoutes({req,res,cid,path,method,auth,db,bodyJson,transaction,audit,send,fail,requireRole,uuid}))return;
 
   if(method==='GET'&&(path==='/api/v1/customers/me/orders'||path==='/api/v1/admin/orders')){
     if(path.includes('/admin/'))requireRole(auth,'admin');else requireRole(auth,'customer');
