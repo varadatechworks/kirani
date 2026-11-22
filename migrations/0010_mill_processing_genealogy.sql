@@ -53,12 +53,13 @@ CREATE TABLE IF NOT EXISTS processing_outputs(
  unit_code text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,batch_code)
 );
 CREATE TABLE IF NOT EXISTS processing_output_genealogy(
- tenant_id uuid NOT NULL REFERENCES tenants(id),output_id uuid NOT NULL REFERENCES processing_outputs(id),
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenants(id),output_id uuid NOT NULL REFERENCES processing_outputs(id),
  source_lot_id uuid REFERENCES inventory_lots(id),parent_output_id uuid REFERENCES processing_outputs(id),
  source_quantity numeric(12,3) NOT NULL CHECK(source_quantity>0),
- PRIMARY KEY(tenant_id,output_id,source_lot_id,parent_output_id),
  CHECK((source_lot_id IS NOT NULL)::int + (parent_output_id IS NOT NULL)::int = 1)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS processing_genealogy_source_lot_uq ON processing_output_genealogy(tenant_id,output_id,source_lot_id) WHERE source_lot_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS processing_genealogy_parent_output_uq ON processing_output_genealogy(tenant_id,output_id,parent_output_id) WHERE parent_output_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS processing_exceptions(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenants(id),job_id uuid NOT NULL REFERENCES processing_jobs(id),
  stage_id uuid REFERENCES processing_job_stages(id),exception_type text NOT NULL,variance numeric(12,3) NOT NULL,
