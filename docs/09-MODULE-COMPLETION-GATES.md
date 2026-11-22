@@ -88,13 +88,13 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 | Monthly cycles and recurring basket | 80% | 75% | 78% | One-time basket, cycle timezone/cutoff edge cases, substitutions and version UX |
 | Order preview, placement and lifecycle | 90% | 85% | 88% | Paid/partial cancellation, amendments, serviceability and browser E2E |
 | Farmer onboarding and seasonal listings | 90% | 85% | 88% | Document upload/verification provider, edit/withdraw/expiry UX and payout profile |
-| Procurement planning and purchase orders | 85% | 80% | 83% | Demand aggregation, supplier quotes, PO change/cancel and approval limits |
+| Procurement planning and purchase orders | 90% | 88% | 90% | Demand-by-delivery-date planner now reconciles confirmed orders with expiry-valid stock and unallocated approved farmer supply; supplier quote comparison, PO amendments/cancellation and approval limits remain |
 | Goods receipt and quality | 90% | 85% | 90% | Weighment evidence, QC checklist configuration and browser E2E |
 | Mill processing and batch genealogy | 90% | 85% | 92% | Rework/correction workflows, multi-source merge approval, operator/equipment evidence and E2E |
-| Inventory, expiry and recall | 95% | 90% | 95% | Concurrent stress/tenant matrix, scheduled expiry worker, recall closure evidence and browser E2E |
-| Packaging and QR traceability | 88% | 80% | 90% | Print-ready label templates, customer trace page polish, token revocation and E2E |
+| Inventory, expiry and recall | 97% | 92% | 97% | Automated distributed-safe reservation expiry worker, append-only stock ledger, expiry-aware FEFO/FIFO, partial transfers, reconciliation and recall ancestry; deeper concurrent stress, full tenant matrix and browser E2E remain |
+| Packaging and QR traceability | 95% | 92% | 95% | Customer-facing source/batch trace page, generated SVG QR label, print action and PII-minimized trace response; token revocation, scan-device matrix and browser E2E remain |
 | Delivery slots and proof of delivery | 88% | 85% | 90% | COD-to-payment reconciliation, photo/signature evidence, failed-delivery reattempts and route E2E |
-| Payments and refunds | 70% | 65% | 75% | Live gateway adapter/webhooks, signature verification, automated refunds, reconciliation reports and provider certification |
+| Payments and refunds | 82% | 78% | 88% | Razorpay order-intent creation, checkout UI, raw-body HMAC webhook verification, capture idempotency, amount/currency checks, event exception register and offline reconciliation; live credentials, provider certification and automated refund API remain |
 | Farmer payables and settlement | 85% | 80% | 88% | Bank payout integration, tax/fee policy, settlement reversal and statement export |
 | Loyalty wallet and conversion | 92% | 88% | 92% | Effective-dated conversion, immutable point-value snapshots, expiry-aware point lots, FEFO redemption, expiry sweep and one-level direct referrals; refund clawback/debt and deeper effective-date scenarios remain |
 | Notifications and support | 80% | 75% | 82% | Email/SMS/WhatsApp providers, templates, SLA/escalation, campaigns and delivery receipts |
@@ -119,9 +119,9 @@ Implemented on `feat/phase-1-foundation`:
 - Admin workspace for stock adjustment, reservation, release, lot quality actions and ledger review.
 - PostgreSQL integration coverage for reservation replay, balance changes, release, invalid negative adjustment, quality hold/release, ledger events and role denial.
 
-Latest baseline processing/inventory CI: [Kirani CI run 44993154500](https://github.com/varadatechworks/kirani/actions/runs/44993154500) passed before the finance and engagement additions. Finance/engagement changes are undergoing new CI. UAT has not been performed.
+Latest combined CI for processing, inventory, delivery, finance, demand planning and QR traceability: [Kirani CI run 45011814692](https://github.com/varadatechworks/kirani/actions/runs/45011814692) passed migrations and `npm run check`. UAT has not been performed.
 
-Remaining inventory work before 98%: scheduled execution/monitoring of reservation expiry, stronger concurrent-write and tenant-isolation stress tests, recall case evidence and browser-level end-to-end verification of the admin controls.
+Remaining inventory work before 98%: deeper concurrent-write and tenant-isolation stress tests, recall closure evidence and browser-level end-to-end verification of the admin controls.
 
 
 ## Processing, inventory and traceability implementation update
@@ -133,8 +133,10 @@ Implemented on `feat/phase-1-foundation`:
 - Mass-balance deviations create reviewable exceptions; failed QC blocks subsequent processing. Output batches retain source-lot/parent-output genealogy.
 - Completed output batches are created as quarantined inventory lots; Kirani inspection is required before stock is released.
 - Package IDs and opaque public tokens bind customer order lines to inventory lots. Public trace returns product and batch lineage without farmer contact or private address details.
+- A polished customer-facing `/trace/{token}` page and generated SVG QR print labels are now wired into the packing workspace; the canonical `PUBLIC_APP_URL` is required for absolute QR destinations.
 - Source recalls recursively identify transferred and processed descendant lots, release active reservations, block affected inventory and mark impacted packages recalled.
 - Inventory now captures best-before/expiry dates, excludes expired stock from reservations/packing/processing, supports FIFO/FEFO policy, partial lot transfers using child-lot identity, reservation expiry sweeps, append-only ledger enforcement and ledger-to-stock reconciliation.
+- A distributed-safe background worker now runs reservation expiry on startup and at a configurable interval, using a PostgreSQL advisory lock so multiple app instances do not release the same reservation twice.
 - Admin screens now include mill operations, package packing/trace register, expiry controls, partial transfers, recall impact and reconciliation status.
 
 Latest verified automated inventory integration run for the expiry/partial-transfer/reconciliation changes: [Kirani CI run 44992266010](https://github.com/varadatechworks/kirani/actions/runs/44992266010) — 16 tests passed, migrations and syntax checks passed. The subsequent recall ancestry enhancement is undergoing its own CI run. UAT has not been performed.
@@ -156,14 +158,15 @@ Automated CI covering the delivery slot, assignment, GPS start and partial-POD w
 ## Finance, loyalty and engagement implementation update
 
 Implemented on `feat/phase-1-foundation`:
-- Manual payment reconciliation records for UPI, bank transfer, external card, COD and cash, with order balance checks and an append-only payment ledger. This records externally completed payments; it does not initiate gateway transactions.
+- Razorpay payment-intent creation and customer checkout are implemented behind environment credentials. Signed raw-body webhooks verify HMAC-SHA256, bind provider orders to Kirani intents, reject mismatched/over-captures, prevent duplicate captures and store only minimal payment fields in the gateway-event ledger.
+- Admin finance now shows live credential readiness and verified webhook exceptions. Offline UPI, bank transfer, external card, COD and cash entries remain manual reconciliation records.
 - Customer refund requests, admin maker-checker approval, and reconciliation after an external refund has actually been completed. Refund amount cannot exceed captured, unrefunded transactions.
 - Farmer payable accrual from quality-accepted GRN quantities at the PO unit price; reason-coded deductions; settlement batch creation; different-admin approval; bank/UTR reference recording; farmer payable and settlement statements.
 - Effective-dated, versioned loyalty conversion policies with point-value snapshots, customer wallet/ledger, delivery-and-payment-gated earning, redemption caps, expiry-aware point lots, FEFO redemption, expiry sweep, one-level referral codes and qualification rewards, and idempotency.
 - Tenant-scoped in-app notifications, category preferences, admin broadcast by user/role, read receipts, customer support tickets/messages, internal notes, priority/status/assignment, plus operations, financial reconciliation and traceability/quality reports.
 - Admin finance/loyalty, support and reports workspaces; customer rewards/inbox/support panels; farmer earnings/settlement view.
 
-External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting, loyalty refund clawback/debt are not yet implemented. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
+Automated Razorpay refund submission, bank payout integration, email/SMS/WhatsApp providers, campaign scheduling, full financial reporting and loyalty refund clawback/debt remain. Direct one-level referral rewards are implemented. Configure credentials and business policies before production.
 
 ## Security hardening update
 
@@ -176,6 +179,6 @@ The in-process limiter is a single-instance safeguard, not a distributed quota. 
 
 ## Latest integrated verification
 
-[Kirani CI run 45010076177](https://github.com/varadatechworks/kirani/actions/runs/45010076177) completed successfully on the feature branch. PostgreSQL migrations and `npm run check` passed; the suite reported 18 tests passed and 0 failed. Coverage includes customer order/checkout, procurement and GRN, inventory/processing/traceability/delivery, payment/refund reconciliation, farmer settlement maker-checker, loyalty policy/expiry/referrals, notifications/support/reports, cross-tenant access and rate-limiter behavior.
+[Kirani CI run 45011814692](https://github.com/varadatechworks/kirani/actions/runs/45011814692) completed successfully on the feature branch. PostgreSQL migrations and `npm run check` passed. Coverage includes customer order/checkout, demand planning, procurement and GRN, inventory reservation expiry/ledger/recall, mill processing, package trace and QR label generation, delivery/POD, signed Razorpay webhook replay and duplicate-capture handling, refund reconciliation, farmer settlement maker-checker, loyalty expiry/referrals, notifications/support/reports, cross-tenant access and rate-limiter behavior.
 
 This is automated development verification only. No browser UAT, live gateway/bank/provider transaction, production deployment or mobile store build has been completed.
