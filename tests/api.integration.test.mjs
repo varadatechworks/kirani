@@ -316,6 +316,12 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(gatewayWebhook.status,200);const gatewayResult=(await gatewayWebhook.json()).data;assert.equal(gatewayResult.paymentStatus,'PAID');
   const gatewayReplay=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':gatewaySignature,'x-razorpay-event-id':gatewayEventId},body:gatewayBody});
   assert.equal(gatewayReplay.status,200);assert.equal((await gatewayReplay.json()).data.replayed,true);
+  const duplicateCapturePayload={event:'payment.captured',payload:{payment:{entity:{id:'pay_duplicate_'+randomUUID().replaceAll('-',''),order_id:gatewayOrderId,amount:500,currency:'INR'}}}};
+  const duplicateCaptureBody=JSON.stringify(duplicateCapturePayload),duplicateCaptureSignature=createHmac('sha256','ci-razorpay-webhook-secret').update(duplicateCaptureBody).digest('hex');
+  const duplicateCapture=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':duplicateCaptureSignature,'x-razorpay-event-id':'evt_duplicate_'+randomUUID().replaceAll('-','')},body:duplicateCaptureBody});
+  assert.equal(duplicateCapture.status,200);assert.equal((await duplicateCapture.json()).data.ignored,true);
+  const gatewayCaptureCount=await pool.query("SELECT count(*)::int AS n FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE' AND external_reference LIKE 'razorpay:%'",[tenant,secondOrder.data.id]);
+  assert.equal(gatewayCaptureCount.rows[0].n,1);
   const badGateway=await fetch(base+'/api/v1/webhooks/razorpay',{method:'POST',headers:{'content-type':'application/json','x-razorpay-signature':'00','x-razorpay-event-id':'evt_bad'},body:gatewayBody});
   assert.equal(badGateway.status,401);
   const refundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:100,reason:'Customer requested a partial refund for test'})});
