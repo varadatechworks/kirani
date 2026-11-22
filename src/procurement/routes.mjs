@@ -35,6 +35,36 @@ export async function handleFarmerProcurementRoutes(ctx){
    return {...po.rows[0],items:[{id:item.rows[0].id,productId:item.rows[0].product_id,quantityOrdered:String(item.rows[0].quantity_ordered),unitCode:item.rows[0].unit_code,unitPriceMinor:String(item.rows[0].unit_price_minor),lineTotalMinor:String(item.rows[0].line_total_minor)}]};
   });return send(res,poShape(r),cid),true;
  }
+ if(method==='GET'&&path==='/api/v1/admin/procurement/demand-plan'){
+  requireRole(auth,'admin');
+  const deliveryDate=new URL(req.url,'http://kirani.local').searchParams.get('deliveryDate')||'';
+  const parsedDate=new Date(deliveryDate+'T00:00:00Z');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==deliveryDate)fail(422,'DEMAND_PLAN_DATE_INVALID','Provide a valid delivery date in YYYY-MM-DD format.');
+  const q=await db.query(`WITH demand AS (
+   SELECT oi.product_id,sum(oi.quantity)::numeric(12,3) AS demand_quantity
+   FROM orders o JOIN order_items oi ON oi.order_id=o.id
+   WHERE o.tenant_id=$1 AND o.delivery_date=$2 AND o.fulfilment_status NOT IN ('CANCELLED','DELIVERED')
+   GROUP BY oi.product_id
+  ),stock AS (
+   SELECT product_id,sum(quantity_available)::numeric(12,3) AS available_quantity
+   FROM inventory_lots WHERE tenant_id=$1 AND status='AVAILABLE'
+    AND (expires_on IS NULL OR expires_on >= $2::date)
+    AND (best_before IS NULL OR best_before >= $2::date)
+   GROUP BY product_id
+  ),supply AS (
+   SELECT product_id,sum(GREATEST(available_quantity-allocated_quantity,0))::numeric(12,3) AS supply_quantity
+   FROM farmer_listings WHERE tenant_id=$1 AND status='APPROVED'
+   GROUP BY product_id
+  )
+  SELECT p.id AS product_id,p.sku,p.name AS product_name,p.base_unit,
+   d.demand_quantity,COALESCE(st.available_quantity,0)::numeric(12,3) AS inventory_available,
+   COALESCE(s.supply_quantity,0)::numeric(12,3) AS farmer_supply_available,
+   GREATEST(d.demand_quantity-COALESCE(st.available_quantity,0)-COALESCE(s.supply_quantity,0),0)::numeric(12,3) AS net_shortage
+  FROM demand d JOIN products p ON p.id=d.product_id AND p.tenant_id=$1
+  LEFT JOIN stock st ON st.product_id=d.product_id LEFT JOIN supply s ON s.product_id=d.product_id
+  ORDER BY p.name`,[auth.tenantId,deliveryDate]);
+  return send(res,{deliveryDate,lines:q.rows.map(x=>({productId:x.product_id,sku:x.sku,productName:x.product_name,unitCode:x.base_unit,demandQuantity:String(x.demand_quantity),inventoryAvailable:String(x.inventory_available),farmerSupplyAvailable:String(x.farmer_supply_available),netShortage:String(x.net_shortage),coverageStatus:Number(x.net_shortage)>0?'SHORT':'COVERED'})),generatedAt:new Date().toISOString()},cid),true;
+ }
  if(method==='GET'&&(path==='/api/v1/admin/procurement/orders'||path==='/api/v1/farmers/me/procurement-orders')){
   const admin=path.includes('/admin/');if(admin)requireRole(auth,'admin');else requireRole(auth,'farmer');
   const q=admin?await db.query(`SELECT po.*,po.expected_delivery_date::text AS expected_delivery_date,u.display_name AS farmer_name,COALESCE(json_agg(json_build_object('id',i.id,'productId',i.product_id,'quantityOrdered',i.quantity_ordered::text,'quantityAccepted',i.quantity_accepted::text,'quantityReceived',i.quantity_received::text,'quantityQualityAccepted',i.quantity_quality_accepted::text,'quantityRejected',i.quantity_rejected::text,'unitCode',i.unit_code,'unitPriceMinor',i.unit_price_minor::text,'lineTotalMinor',i.line_total_minor::text)) FILTER(WHERE i.id IS NOT NULL),'[]') AS items FROM procurement_orders po JOIN users u ON u.id=po.farmer_id LEFT JOIN procurement_order_items i ON i.procurement_order_id=po.id AND i.tenant_id=po.tenant_id WHERE po.tenant_id=$1 GROUP BY po.id,u.display_name ORDER BY po.created_at DESC LIMIT 200`,[auth.tenantId]):await db.query(`SELECT po.*,po.expected_delivery_date::text AS expected_delivery_date,COALESCE(json_agg(json_build_object('id',i.id,'productId',i.product_id,'quantityOrdered',i.quantity_ordered::text,'quantityAccepted',i.quantity_accepted::text,'quantityReceived',i.quantity_received::text,'quantityQualityAccepted',i.quantity_quality_accepted::text,'quantityRejected',i.quantity_rejected::text,'unitCode',i.unit_code,'unitPriceMinor',i.unit_price_minor::text,'lineTotalMinor',i.line_total_minor::text)) FILTER(WHERE i.id IS NOT NULL),'[]') AS items FROM procurement_orders po LEFT JOIN procurement_order_items i ON i.procurement_order_id=po.id AND i.tenant_id=po.tenant_id WHERE po.tenant_id=$1 AND po.farmer_id=$2 GROUP BY po.id ORDER BY po.created_at DESC LIMIT 100`,[auth.tenantId,auth.userId]);
