@@ -16,12 +16,13 @@ Kirani is a traceable grocery sourcing and fulfilment platform. Development is o
 
 Requires Node.js 20.6+ and PostgreSQL 15+.
 
-1. Copy `.env.example` to `.env`, configure `DATABASE_URL`, and set `AUTH_JWT_SECRET` to at least 32 random bytes. Configure the trusted token issuer and audience.
+1. Copy `.env.example` to `.env`, configure `DATABASE_URL`, and set `AUTH_JWT_SECRET` to at least 32 random bytes. Configure `AUTH_ISSUER` and `AUTH_AUDIENCE`.
 2. Install dependencies: `npm install`.
 3. Apply migrations: `node --env-file=.env src/db/migrate.mjs`. The runner records checksums and adopts a complete existing Phase 1 schema if it was previously applied manually.
-4. Create the first tenant/admin identity: `node --env-file=.env scripts/bootstrap-tenant.mjs`. This creates the tenant, role catalogue and active admin user, but does not issue credentials or tokens.
-5. Configure a trusted identity provider to issue HS256 JWTs with `sub` (user UUID), `tenant_id`, `iss`, `aud`, `exp` and a roles array. Kirani verifies the signature and checks the user's active status and roles against PostgreSQL.
-6. Start: `node --env-file=.env src/server.mjs`; open `http://localhost:3000`.
+4. Create the first tenant/admin identity: `node --env-file=.env scripts/bootstrap-tenant.mjs`. This creates the tenant, role catalogue and active admin user, but does not issue credentials or tokens. Save the printed tenant and user UUIDs.
+5. For local-only testing, generate a 15-minute admin token: `node --env-file=.env scripts/dev-token.mjs <user-id> <tenant-id>`. This command is disabled unless `NODE_ENV=development`. Paste the output into **Connect API** in the UI. Never use this token generator in a deployed environment.
+6. For deployment, configure a trusted identity provider to issue HS256 JWTs with `sub` (user UUID), `tenant_id`, `iss`, `aud`, `exp` and a roles array. Kirani verifies the signature and checks the user's active status and roles against PostgreSQL.
+7. Start: `node --env-file=.env src/server.mjs`; open `http://localhost:3000`.
 
 The admin bootstrap utility should be run once in a controlled environment. Do not commit `.env` or use sample secrets in deployment.
 
@@ -38,7 +39,7 @@ Base path: `/api/v1`. Send `Authorization: Bearer <access-token>` and JSON for w
 - `GET /admin/listings`; `POST /admin/listings/:id/decision`
 - `GET /customers/me/orders`, `GET /admin/orders`, `GET /orders/:id`
 
-The front-end Connect API action accepts a short-lived access token from the configured identity provider. The token remains in page memory only and is not written to localStorage/sessionStorage. No refresh-token or MFA flow is implemented in this phase.
+The front-end Connect API action accepts a short-lived access token. The token remains in page memory only and is not written to localStorage/sessionStorage. No refresh-token or MFA flow is implemented in this phase.
 
 ## Important boundaries
 
