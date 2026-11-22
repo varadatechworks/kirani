@@ -41,6 +41,7 @@
   root.querySelector('#apTransfers').innerHTML=inventoryTransfers.length?inventoryTransfers.map(x=>'<div class="ap-po"><div><b>'+e(x.transferNumber)+' · '+e(x.lotCode)+' · '+e(x.productName)+'</b><small>'+e(x.fromLocation)+' → '+e(x.toLocation)+' · '+e(x.reason)+'</small></div><span>'+e(x.quantity)+' · '+e(x.status)+'</span></div>').join(''):'No lot transfers recorded.';
   root.querySelector('#apLedger').innerHTML=inventoryLedger.length?inventoryLedger.map(x=>'<div class="ap-po"><div><b>'+e(x.eventType)+' · '+e(x.productName)+' · '+e(x.lotCode)+'</b><small>'+e(x.reason)+' · '+e(x.createdAt)+'</small></div><span>On hand '+e(x.onHandDelta)+' · free '+e(x.availableDelta)+'</span></div>').join(''):'No stock movements recorded yet.';
   root.querySelector('#apRefresh').onclick=()=>renderAdminProcurement().catch(err=>toast(err.message));
+  if(window.renderProcessingWorkspace)await window.renderProcessingWorkspace().catch(err=>toast(err.message));
  }
  window.renderAdminProcurement=renderAdminProcurement;
 })();
