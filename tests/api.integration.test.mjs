@@ -259,7 +259,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(redeemed.status,200);assert.equal(redeemed.data.pointsRedeemed,'10');
   const redemptionReplay=await call('customer','/customers/me/loyalty/redeem',{method:'POST',headers:{'idempotency-key':redemptionKey},body:JSON.stringify({orderId:secondOrder.data.id,points:10})});
   assert.equal(redemptionReplay.status,200);assert.equal(redemptionReplay.data.replayed,true);
-  const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:secondOrder.data.totalMinor,reason:'CI second order payment'})});
+  const secondPayment=await call('admin','/admin/orders/'+secondOrder.data.id+'/payments/record',{method:'POST',body:JSON.stringify({method:'BANK_TRANSFER',externalReference:'BANK-CI-'+randomUUID(),amountMinor:String(BigInt(secondOrder.data.totalMinor)-500n),reason:'CI second order payment'})});
   assert.equal(secondPayment.status,200);
   const refundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:100,reason:'Customer requested a partial refund for test'})});
   assert.equal(refundRequest.status,200);assert.equal(refundRequest.data.status,'REQUESTED');
