@@ -17,13 +17,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   t.after(async()=>{child.kill('SIGTERM');await Promise.race([once(child,'exit'),delay(3000)]);await pool.end();});
   const tenant=(await pool.query('INSERT INTO tenants(name) VALUES($1) RETURNING id',['CI Kirani '+randomUUID()])).rows[0].id;
   const roleIds={};
-  for(const role of ['admin','farmer','customer','mill_operator'])roleIds[role]=(await pool.query('INSERT INTO roles(tenant_id,code,name) VALUES($1,$2,$3) RETURNING id',[tenant,role,role])).rows[0].id;
+  for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])roleIds[role]=(await pool.query('INSERT INTO roles(tenant_id,code,name) VALUES($1,$2,$3) RETURNING id',[tenant,role,role])).rows[0].id;
   const userIds={};
-  for(const role of ['admin','farmer','customer','mill_operator'])userIds[role]=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,$2,$3,'active') RETURNING id",[tenant,'CI '+role,role+'-'+randomUUID()+'@kirani.test'])).rows[0].id;
-  for(const role of ['admin','farmer','customer','mill_operator'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
+  for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])userIds[role]=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,$2,$3,'active') RETURNING id",[tenant,'CI '+role,role+'-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  for(const role of ['admin','farmer','customer','mill_operator','delivery_operator'])await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds[role],roleIds[role]]);
   const cycle=(await pool.query("INSERT INTO grocery_cycles(tenant_id,code,starts_on,delivery_from,delivery_to,cutoff_at,status) VALUES($1,$2,current_date,current_date,current_date+3,now()+interval '2 days','OPEN') RETURNING id",[tenant,'CI-'+randomUUID()])).rows[0].id;
   const token=role=>{const enc=v=>Buffer.from(JSON.stringify(v)).toString('base64url');const header=enc({alg:'HS256',typ:'JWT'});const claims=enc({sub:userIds[role],tenant_id:tenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]});const unsigned=header+'.'+claims;return unsigned+'.'+createHmac('sha256',secret).update(unsigned).digest('base64url');};
-  const tokens={admin:token('admin'),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator')};
+  const tokens={admin:token('admin'),farmer:token('farmer'),customer:token('customer'),mill_operator:token('mill_operator'),delivery_operator:token('delivery_operator')};
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -190,6 +190,17 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
   const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
+  const slot=await call('admin','/admin/delivery/slots',{method:'POST',body:JSON.stringify({slotCode:'CI-AM-'+randomUUID().slice(0,5),deliveryDate:new Date(Date.now()+86400000).toISOString().slice(0,10),startsAt:'09:00',endsAt:'11:00',capacity:5,cutoffAt:new Date(Date.now()+3600000).toISOString()})});
+  assert.equal(slot.status,200);
+  const deliveryAssignment=await call('admin','/admin/delivery/assignments',{method:'POST',body:JSON.stringify({orderId:order.data.id,slotId:slot.data.id,operatorId:userIds.delivery_operator})});
+  assert.equal(deliveryAssignment.status,200);assert.equal(deliveryAssignment.data.status,'ASSIGNED');
+  const operatorAssignments=await call('delivery_operator','/delivery/assignments');assert.ok(operatorAssignments.data.some(x=>x.id===deliveryAssignment.data.id));
+  const assignmentDetail=await call('delivery_operator','/delivery/assignments/'+deliveryAssignment.data.id);assert.equal(assignmentDetail.status,200);assert.equal(assignmentDetail.data.items[0].remaining,0.4);
+  const deliveryStart=await call('delivery_operator','/delivery/assignments/'+deliveryAssignment.data.id+'/start',{method:'POST',body:JSON.stringify({latitude:12.9716,longitude:77.5946,reason:'CI operator started route'})});
+  assert.equal(deliveryStart.status,200);assert.equal(deliveryStart.data.status,'OUT_FOR_DELIVERY');
+  const pod=await call('delivery_operator','/delivery/assignments/'+deliveryAssignment.data.id+'/pod',{method:'POST',body:JSON.stringify({latitude:12.9716,longitude:77.5946,receivedBy:'CI Recipient',reason:'CI partial delivery accepted',cashCollected:0,items:[{orderItemId:orderDetail.data.items[0].id,quantityDelivered:0.4,quantityRefused:0,reason:'Remaining quantity requires another packed dispatch'}]})});
+  assert.equal(pod.status,200);assert.equal(pod.data.outcome,'PARTIAL');assert.equal(pod.data.status,'PARTIALLY_DELIVERED');
+
   const recall=await call('admin','/admin/inventory/recalls',{method:'POST',body:JSON.stringify({recallNumber:'RECALL-CI-'+randomUUID(),sourceLotId:sourceForMill.id,reason:'CI source contamination recall exercise'})});
   assert.equal(recall.status,200);assert.equal(recall.data.status,'OPEN');assert.equal(recall.data.affectedPackages,1);assert.ok(recall.data.affectedLots>=3);
   const recallRegister=await call('admin','/admin/inventory/recalls');assert.equal(recallRegister.status,200);assert.ok(recallRegister.data.some(x=>x.id===recall.data.id));
