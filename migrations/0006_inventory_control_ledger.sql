@@ -47,9 +47,8 @@ CREATE INDEX IF NOT EXISTS inventory_ledger_tenant_product_idx ON inventory_ledg
 
 INSERT INTO inventory_ledger(tenant_id,lot_id,product_id,location_id,event_type,quantity_on_hand_delta,quantity_available_delta,reference_type,reference_id,reason,actor_id,correlation_id)
 SELECT il.tenant_id,il.id,il.product_id,il.location_id,'OPENING',il.quantity_on_hand,il.quantity_available,'migration','0006','Opening balance carried forward',u.id,'migration-0006'
-FROM inventory_lots il JOIN users u ON u.tenant_id=il.tenant_id
-WHERE NOT EXISTS(SELECT 1 FROM inventory_ledger x WHERE x.lot_id=il.id AND x.event_type='OPENING')
-AND u.id=(SELECT min(u2.id) FROM users u2 WHERE u2.tenant_id=il.tenant_id);
+FROM inventory_lots il JOIN LATERAL (SELECT u.id FROM users u WHERE u.tenant_id=il.tenant_id ORDER BY u.created_at,u.id LIMIT 1) u ON true
+WHERE NOT EXISTS(SELECT 1 FROM inventory_ledger x WHERE x.lot_id=il.id AND x.event_type='OPENING');
 
 CREATE TABLE IF NOT EXISTS inventory_reservations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
