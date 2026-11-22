@@ -68,9 +68,10 @@ export async function handleFinanceRoutes(ctx){
    if(!order.rowCount)fail(404,'ORDER_NOT_FOUND','Order was not found.');
    if(['CANCELLED','REFUNDED'].includes(order.rows[0].fulfilment_status)||order.rows[0].payment_status==='PAID')fail(409,'ORDER_NOT_PAYABLE','This order does not have an outstanding payment.');
    const captured=await client.query("SELECT COALESCE(sum(amount_minor),0)::text AS n FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE'",[auth.tenantId,id]);
-   const amount=BigInt(order.rows[0].total_minor)-BigInt(captured.rows[0].n);if(amount<=0n)fail(409,'ORDER_NOT_PAYABLE','This order does not have an outstanding payment.');
+   const amount=BigInt(order.rows[0].total_minor)-BigInt(captured.rows[0].n);if(amount<=0n)fail(409,'ORDER_NOT_PAYABLE','This order does not have an outstanding payment.');if(amount>BigInt(Number.MAX_SAFE_INTEGER))fail(422,'PAYMENT_AMOUNT_UNSUPPORTED','Order amount exceeds the payment provider limit.');
    const current=await client.query("SELECT * FROM payment_intents WHERE tenant_id=$1 AND order_id=$2 AND provider='RAZORPAY' AND status IN ('CREATING','OPEN') ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[auth.tenantId,id]);
-   if(current.rowCount&&current.rows[0].status==='OPEN')return {intent:current.rows[0],create:false};
+   if(current.rowCount&&current.rows[0].status==='CREATING'&&new Date(current.rows[0].created_at).getTime()>Date.now()-120000)fail(409,'PAYMENT_INTENT_IN_PROGRESS','A secure payment session is already being created. Please retry in a moment.');
+   if(current.rowCount&&current.rows[0].status==='OPEN'&&BigInt(current.rows[0].amount_minor)===amount)return {intent:current.rows[0],create:false};
    if(current.rowCount)await client.query("UPDATE payment_intents SET status='FAILED',updated_at=now() WHERE id=$1",[current.rows[0].id]);
    const created=await client.query("INSERT INTO payment_intents(tenant_id,order_id,provider,amount_minor,currency,status,created_by) VALUES($1,$2,'RAZORPAY',$3,$4,'CREATING',$5) RETURNING *",[auth.tenantId,id,String(amount),order.rows[0].currency,auth.userId]);
    return {intent:created.rows[0],create:true};
