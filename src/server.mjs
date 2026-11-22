@@ -15,10 +15,12 @@ import { handleDeliveryRoutes } from './delivery/routes.mjs';
 import { handleLoyaltyRoutes } from './loyalty/routes.mjs';
 import { handleEngagementRoutes } from './engagement/routes.mjs';
 import { handleFinanceRoutes } from './finance/routes.mjs';
+import { createRateLimiter } from './security/rate-limit.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 const root = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
 const types = { '.html':'text/html; charset=utf-8', '.webmanifest':'application/manifest+json; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.svg':'image/svg+xml' };
+const rateLimit=createRateLimiter({limit:Number(process.env.API_RATE_LIMIT_PER_MINUTE??120),windowMs:Number(process.env.API_RATE_WINDOW_MS??60_000),trustProxy:process.env.TRUST_PROXY==='true'});
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 class HttpError extends Error { constructor(status,code,message){super(message);this.status=status;this.code=code;} }
 const fail=(status,code,message)=>{throw new HttpError(status,code,message)};
@@ -196,7 +198,9 @@ async function route(req,res,cid){
   fail(404,'ENDPOINT_NOT_FOUND','This Kirani workflow is not available yet.');
 }
 const server=http.createServer(async(req,res)=>{
-  const cid=correlationId(req.headers['x-correlation-id']);res.setHeader('x-correlation-id',cid);res.setHeader('x-content-type-options','nosniff');res.setHeader('referrer-policy','strict-origin-when-cross-origin');res.setHeader('permissions-policy','camera=(), microphone=(), geolocation=()');res.setHeader('cache-control','no-store');
+  const cid=correlationId(req.headers['x-correlation-id']);res.setHeader('x-correlation-id',cid);res.setHeader('x-content-type-options','nosniff');res.setHeader('referrer-policy','strict-origin-when-cross-origin');res.setHeader('permissions-policy','camera=(), microphone=(), geolocation=()');res.setHeader('cache-control','no-store');res.setHeader('x-frame-options','DENY');res.setHeader('content-security-policy',"frame-ancestors 'none'");res.setHeader('cross-origin-resource-policy','same-origin');
+  if(req.socket?.encrypted||process.env.TRUST_PROXY==='true'&&req.headers['x-forwarded-proto']==='https')res.setHeader('strict-transport-security','max-age=31536000; includeSubDomains');
+  if(String(req.url||'').startsWith('/api/')){const rate=rateLimit.consume(req);res.setHeader('x-ratelimit-limit',String(rate.limit));res.setHeader('x-ratelimit-remaining',String(rate.remaining));res.setHeader('x-ratelimit-reset',String(Math.ceil(rate.resetAt/1000)));if(!rate.allowed){res.statusCode=429;res.setHeader('retry-after',String(rate.retryAfterSeconds));res.setHeader('content-type','application/json; charset=utf-8');res.end(JSON.stringify({error:{code:'RATE_LIMITED',message:'Too many requests. Please retry after the indicated interval.'},correlationId:cid}));return;}}
   try{await route(req,res,cid);}catch(error){if(!(error instanceof HttpError))process.stderr.write(JSON.stringify({event:'request_failed',correlationId:cid,errorCode:error?.code??'INTERNAL_ERROR',errorType:error?.name??'Error'})+'\\n');if(!res.headersSent)sendError(res,error,cid);else res.destroy();}
 });
 server.listen(port,'0.0.0.0',()=>process.stdout.write(JSON.stringify({event:'server_started',port})+'\n'));
