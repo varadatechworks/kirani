@@ -209,6 +209,6 @@ const server=http.createServer(async(req,res)=>{
   if(String(req.url||'').startsWith('/api/')){const rate=rateLimit.consume(req);res.setHeader('x-ratelimit-limit',String(rate.limit));res.setHeader('x-ratelimit-remaining',String(rate.remaining));res.setHeader('x-ratelimit-reset',String(Math.ceil(rate.resetAt/1000)));if(!rate.allowed){res.statusCode=429;res.setHeader('retry-after',String(rate.retryAfterSeconds));res.setHeader('content-type','application/json; charset=utf-8');res.end(JSON.stringify({error:{code:'RATE_LIMITED',message:'Too many requests. Please retry after the indicated interval.'},correlationId:cid}));return;}}
   try{await route(req,res,cid);}catch(error){if(!(error instanceof HttpError))process.stderr.write(JSON.stringify({event:'request_failed',correlationId:cid,errorCode:error?.code??'INTERNAL_ERROR',errorType:error?.name??'Error'})+'\\n');if(!res.headersSent)sendError(res,error,cid);else res.destroy();}
 });
-server.listen(port,'0.0.0.0',()=>process.stdout.write(JSON.stringify({event:'server_started',port})+'\n'));
+server.listen(port,'0.0.0.0',()=>{process.stdout.write(JSON.stringify({event:'server_started',port})+'\n');void runMaintenance();});
 const shutdown=()=>{clearInterval(maintenanceTimer);server.close(async()=>{if(pool)await pool.end();process.exit(0);});};
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
