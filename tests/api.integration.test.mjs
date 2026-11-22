@@ -14,7 +14,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const secret=process.env.AUTH_JWT_SECRET||'ci-kirani-integration-secret-at-least-32-bytes';
   const issuer=process.env.AUTH_ISSUER||'https://identity.kirani.test/';
   const audience=process.env.AUTH_AUDIENCE||'kirani-api';
-  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience,API_RATE_LIMIT_PER_MINUTE:'1000',RAZORPAY_WEBHOOK_SECRET:'ci-razorpay-webhook-secret'},stdio:'ignore'});
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env:{...process.env,DATABASE_URL:databaseUrl,PORT:String(port),AUTH_JWT_SECRET:secret,AUTH_ISSUER:issuer,AUTH_AUDIENCE:audience,API_RATE_LIMIT_PER_MINUTE:'1000',PUBLIC_APP_URL:'https://kirani.test',RAZORPAY_WEBHOOK_SECRET:'ci-razorpay-webhook-secret'},stdio:'ignore'});
   t.after(async()=>{child.kill('SIGTERM');await Promise.race([once(child,'exit'),delay(3000)]);await pool.end();});
   const tenant=(await pool.query('INSERT INTO tenants(name) VALUES($1) RETURNING id',['CI Kirani '+randomUUID()])).rows[0].id;
   const roleIds={};
@@ -276,6 +276,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const packable=(await pool.query("SELECT il.id,il.quantity_available::text AS q FROM inventory_lots il JOIN processing_outputs po ON po.id=il.processing_output_id WHERE il.tenant_id=$1 AND po.job_id=$2 AND po.output_type='SALEABLE' AND il.status='AVAILABLE'",[tenant,millJob.data.id])).rows[0];
   const packed=await call('admin','/admin/packing/packages',{method:'POST',body:JSON.stringify({orderId:order.data.id,packageNumber:'PKG-CI-'+randomUUID(),items:[{orderItemId:orderDetail.data.items[0].id,quantity:.4,allocations:[{lotId:packable.id,quantity:.4}]}]})});
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
+  const packageLabel=await call('admin','/admin/packing/packages/'+packed.data.id+'/label');assert.equal(packageLabel.status,200);assert.match(packageLabel.data.qrSvg,/<svg/);assert.match(packageLabel.data.traceUrl,/https:\/\/kirani\.test\/trace\//);
   const traceResponse=await fetch(base+packed.data.tracePath);assert.equal(traceResponse.status,200);const tracePayload=await traceResponse.json();assert.equal(tracePayload.data.items[0].productName,'Integration Rice');assert.ok(tracePayload.data.sourceBatches.length>=1);
   const tracePage=await fetch(base+packed.data.tracePath.replace('/api/v1/public/trace/','/trace/'));assert.equal(tracePage.status,200);assert.match(await tracePage.text(),/Product trace/);
   const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id));
