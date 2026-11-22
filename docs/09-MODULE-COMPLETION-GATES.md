@@ -173,3 +173,9 @@ External payment gateway, bank payout, email/SMS/WhatsApp providers, campaign sc
 - Unit tests cover limit windows and trusted-proxy key selection; PostgreSQL integration tests also cover tenant isolation for order and inventory reads.
 
 The in-process limiter is a single-instance safeguard, not a distributed quota. Production multi-instance deployments should enforce an additional shared gateway/WAF limit. MFA, identity-provider integration, secret rotation, threat modelling and penetration testing remain release gates.
+
+## Latest integrated verification
+
+[Kirani CI run 45010076177](https://github.com/varadatechworks/kirani/actions/runs/45010076177) completed successfully on the feature branch. PostgreSQL migrations and `npm run check` passed; the suite reported 18 tests passed and 0 failed. Coverage includes customer order/checkout, procurement and GRN, inventory/processing/traceability/delivery, payment/refund reconciliation, farmer settlement maker-checker, loyalty policy/expiry/referrals, notifications/support/reports, cross-tenant access and rate-limiter behavior.
+
+This is automated development verification only. No browser UAT, live gateway/bank/provider transaction, production deployment or mobile store build has been completed.
