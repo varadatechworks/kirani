@@ -292,6 +292,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
 
   const orderPaymentHistory=await call('customer','/customers/me/orders/'+order.data.id+'/payments');
   assert.equal(orderPaymentHistory.status,200);assert.equal(orderPaymentHistory.data.length,1);const paymentRegister=await call('admin','/admin/payments');assert.equal(paymentRegister.status,200);assert.ok(paymentRegister.data.some(x=>x.orderId===order.data.id));
+  const gatewayConfig=await call('admin','/admin/payments/config');assert.equal(gatewayConfig.status,200);assert.equal(gatewayConfig.data.razorpayCheckoutConfigured,false);assert.equal(gatewayConfig.data.razorpayWebhookConfigured,true);
+  const gatewayEvents=await call('admin','/admin/payments/events');assert.equal(gatewayEvents.status,200);assert.ok(gatewayEvents.data.some(x=>x.eventType==='payment.captured'&&x.signatureVerified));
   const earned=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
   assert.equal(earned.status,200);assert.equal(earned.data.status,'EARNED');assert.ok(BigInt(earned.data.pointsEarned)>0n);const earnedWallet=await call('customer','/customers/me/loyalty');assert.ok(earnedWallet.data.ledger.some(x=>x.policyVersion===1&&x.pointValuePaiseSnapshot===50));
   const earnedReplay=await call('admin','/admin/loyalty/orders/'+order.data.id+'/earn',{method:'POST',body:JSON.stringify({})});
