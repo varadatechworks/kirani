@@ -21,3 +21,12 @@ test('rate limiter keys trusted forwarded addresses only when proxy trust is ena
  assert.equal(untrusted.consume({...req,socket:{remoteAddress:'10.0.0.3'}},1001).allowed,true);
  assert.equal(untrusted.consume({...req,socket:{remoteAddress:'10.0.0.2'}},1002).allowed,false);
 });
+
+test('rate limiter bounds key growth and rejects unsafe configuration',()=>{
+ const limiter=createRateLimiter({limit:1,windowMs:1000,maxKeys:100});
+ for(let i=0;i<150;i++)limiter.consume({headers:{},socket:{remoteAddress:'10.0.0.'+i}},1000);
+ assert.ok(limiter.size()<=100);
+ assert.throws(()=>createRateLimiter({limit:0}));
+ assert.throws(()=>createRateLimiter({windowMs:10}));
+ assert.throws(()=>createRateLimiter({maxKeys:10}));
+});
