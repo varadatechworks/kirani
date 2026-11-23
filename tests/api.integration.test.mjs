@@ -42,6 +42,20 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
   assert.equal(ready,true,'API server should become ready against PostgreSQL');
+
+  const health=await fetch(base+'/health/live',{headers:{'x-correlation-id':'kirani-ci-health'}});
+  assert.equal(health.status,200);
+  assert.equal(health.headers.get('x-correlation-id'),'kirani-ci-health');
+  assert.equal(health.headers.get('x-content-type-options'),'nosniff');
+  assert.equal(health.headers.get('x-frame-options'),'DENY');
+  assert.equal(health.headers.get('referrer-policy'),'strict-origin-when-cross-origin');
+  assert.equal(health.headers.get('cache-control'),'no-store');
+  assert.match(health.headers.get('content-security-policy')??/./,/frame-ancestors 'none'/);
+  const anonymous=await fetch(base+'/api/v1/session/me');
+  assert.equal(anonymous.status,401);
+  assert.equal((await anonymous.json()).error.code,'AUTH_REQUIRED');
+  assert.ok(Number(anonymous.headers.get('x-ratelimit-limit'))>0);
+
   const call=async(role,path,options={})=>{const response=await fetch(base+'/api/v1'+path,{...options,headers:{authorization:'Bearer '+tokens[role],...(options.body?{'content-type':'application/json'}:{}),...(options.headers||{})}});const payload=await response.json();return {status:response.status,...payload};};
 
   const me=await call('admin','/session/me');
