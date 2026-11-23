@@ -8,6 +8,7 @@ import {submitApproval,decideApproval} from '../src/shared/skeleton/approvals.mj
 import {validateBasketItems,assertCycleOpen} from '../src/domain/baskets.mjs';
 import {transitionListing,customerVisibleListing} from '../src/domain/listings.mjs';
 test('normalizes email and rejects invalid identifier',()=>{assert.equal(normalizeIdentifier(' A@B.com '),'a@b.com');assert.throws(()=>normalizeIdentifier('bad'))});
+test('normalizes phone identifiers to canonical digits with optional country prefix',()=>{assert.equal(normalizeIdentifier('98442 74556'),'9844274556');assert.equal(normalizeIdentifier('+91 (98442)-74556'),'+919844274556');assert.throws(()=>normalizeIdentifier('123-abc-7890'));assert.throws(()=>normalizeIdentifier('123456'));});
 test('account transitions require actor and reason',()=>{assert.equal(transitionUser({id:'u',status:'pending'},'active',{actorId:'a',reason:'verified'}).status,'active');assert.throws(()=>transitionUser({id:'u',status:'pending'},'active',{}));assert.throws(()=>assertActiveUser({id:'u',status:'suspended'}))});
 test('authorization denies missing grants',()=>{assert.equal(allowedSimple({roles:['farmer'],roleGrants:{farmer:{listings:['view']}},resource:'listings',action:'approve'}),false)});
 test('location validates coordinates and unavailable reason',()=>{assert.throws(()=>normalizeEventLocation({source:'DEVICE_GPS',latitude:91,longitude:0,consentStatus:'GRANTED',capturedAt:new Date().toISOString()}));assert.throws(()=>normalizeEventLocation({source:'UNAVAILABLE',consentStatus:'DENIED'}))});
