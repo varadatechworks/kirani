@@ -50,7 +50,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(health.headers.get('x-frame-options'),'DENY');
   assert.equal(health.headers.get('referrer-policy'),'strict-origin-when-cross-origin');
   assert.equal(health.headers.get('cache-control'),'no-store');
-  assert.match(health.headers.get('content-security-policy')??/./,/frame-ancestors 'none'/);
+  assert.match(health.headers.get('content-security-policy')??'',/frame-ancestors 'none'/);
   const anonymous=await fetch(base+'/api/v1/session/me');
   assert.equal(anonymous.status,401);
   assert.equal((await anonymous.json()).error.code,'AUTH_REQUIRED');
