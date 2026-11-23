@@ -5,11 +5,11 @@ export function normalizeIdentifier(value){
   if(typeof value!=='string'||!value.trim())throw new TypeError('Identifier required');
   const s=value.trim();
   if(s.includes('@')){
-    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s))throw new Error('Invalid email');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))throw new Error('Invalid email');
     return s.toLowerCase();
   }
-  const d=s.replace(/[\\s()+-]/g,'');
-  if(!/^\\d{7,15}$/.test(d))throw new Error('Invalid phone');
+  const d=s.replace(/[\s()+-]/g,'');
+  if(!/^\d{7,15}$/.test(d))throw new Error('Invalid phone');
   return s.startsWith('+')?'+'+d:d;
 }
 export function assertActiveUser(user){if(!user?.id||user.status!=='active')throw new Error('Active user required');return user}
