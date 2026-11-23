@@ -294,7 +294,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const otherTenantCsv=await fetch(base+'/api/v1/admin/reports/export?type=operations&'+exportQuery,{headers:{authorization:'Bearer '+tokens.otherAdmin,accept:'text/csv'}});
   assert.equal(otherTenantCsv.status,200);assert.doesNotMatch(await otherTenantCsv.text(),new RegExp(order.data.id));
 
-  const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id&&x.traceRevoked));
+  const packageRegister=await call('admin','/admin/packing/packages');assert.equal(packageRegister.status,200);assert.ok(packageRegister.data.some(x=>x.id===packed.data.id&&!x.traceRevoked));
   const slot=await call('admin','/admin/delivery/slots',{method:'POST',body:JSON.stringify({slotCode:'CI-AM-'+randomUUID().slice(0,5),deliveryDate:new Date(Date.now()+86400000).toISOString().slice(0,10),startsAt:'09:00',endsAt:'11:00',capacity:5,cutoffAt:new Date(Date.now()+3600000).toISOString()})});
   assert.equal(slot.status,200);
   const deliveryAssignment=await call('admin','/admin/delivery/assignments',{method:'POST',body:JSON.stringify({orderId:order.data.id,slotId:slot.data.id,operatorId:userIds.delivery_operator})});
@@ -385,6 +385,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const revokeTrace=await call('admin','/admin/packing/packages/'+packed.data.id+'/revoke-trace',{method:'POST',body:JSON.stringify({reason:'CI package trace revocation test'})});assert.equal(revokeTrace.status,200);assert.equal(revokeTrace.data.replayed,false);
   const revokedTrace=await fetch(base+packed.data.tracePath);assert.equal(revokedTrace.status,404);
   const revokedLabel=await call('admin','/admin/packing/packages/'+packed.data.id+'/label');assert.equal(revokedLabel.status,409);assert.equal(revokedLabel.error.code,'PACKAGE_TRACE_REVOKED');
+  const revokedPackageRegister=await call('admin','/admin/packing/packages');assert.equal(revokedPackageRegister.status,200);assert.ok(revokedPackageRegister.data.some(x=>x.id===packed.data.id&&x.traceRevoked));
 
   const reconciliation=await call('admin','/admin/inventory/reconciliation');assert.equal(reconciliation.status,200);assert.equal(reconciliation.data.balanced,true);assert.equal(reconciliation.data.discrepancyCount,0);
   const ledgerForImmutability=await pool.query('SELECT id FROM inventory_ledger WHERE tenant_id=$1 LIMIT 1',[tenant]);
