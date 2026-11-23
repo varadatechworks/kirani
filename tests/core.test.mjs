@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeIdentifier,transitionUser,assertActiveUser} from '../src/shared/skeleton/identity.mjs';
-import {allowedSimple} from '../src/shared/skeleton/authorization.mjs';
+import {allowedSimple,requireSimple} from '../src/shared/skeleton/authorization.mjs';
 import {normalizeEventLocation} from '../src/shared/skeleton/geo.mjs';
 import {redact} from '../src/shared/skeleton/audit.mjs';
 import {calculateQuote} from '../src/shared/skeleton/billing.mjs';
