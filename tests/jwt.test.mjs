@@ -36,3 +36,14 @@ test('extracts only a strict bearer token',()=>{
   assert.equal(bearerToken('Basic abc'),null);
   assert.equal(bearerToken(undefined),null);
 });
+
+test('rejects malformed identity, role, session and not-before claims',()=>{
+  const options={secret,issuer:claims.iss,audience:claims.aud,now:1_900_000_000};
+  assert.throws(()=>verifyAccessToken(sign({...claims,sub:123}),options));
+  assert.throws(()=>verifyAccessToken(sign({...claims,tenant_id:''}),options));
+  assert.throws(()=>verifyAccessToken(sign({...claims,roles:['admin','']}),options));
+  assert.throws(()=>verifyAccessToken(sign({...claims,sid:42}),options));
+  assert.throws(()=>verifyAccessToken(sign({...claims,nbf:'1900000001'}),options));
+  assert.throws(()=>verifyAccessToken(sign({...claims,nbf:1_900_000_001}),options));
+  assert.equal(verifyAccessToken(sign({...claims,nbf:1_900_000_000}),options).userId,'user-1');
+});
