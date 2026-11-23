@@ -58,6 +58,11 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
 
   const call=async(role,path,options={})=>{const response=await fetch(base+'/api/v1'+path,{...options,headers:{authorization:'Bearer '+tokens[role],...(options.body?{'content-type':'application/json'}:{}),...(options.headers||{})}});const payload=await response.json();return {status:response.status,...payload};};
 
+
+  const wrongContentType=await call('customer','/customers/me/addresses',{method:'POST',headers:{'content-type':'text/plain'},body:'{}'});
+  assert.equal(wrongContentType.status,415);assert.equal(wrongContentType.error.code,'JSON_REQUIRED');
+  const malformedJson=await call('customer','/customers/me/addresses',{method:'POST',headers:{'content-type':'application/json'},body:'{'});
+  assert.equal(malformedJson.status,400);assert.equal(malformedJson.error.code,'INVALID_JSON');
   const me=await call('admin','/session/me');
   assert.equal(me.status,200);assert.equal(me.data.roles[0],'admin');
   const dashboard=await call('admin','/admin/dashboard');
