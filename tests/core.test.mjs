@@ -17,3 +17,16 @@ test('billing uses integer minor units and basis points',()=>{const q=calculateQ
 test('approval maker cannot approve own request',()=>{const req=submitApproval({id:'1',entityType:'listing',entityId:'l',makerId:'m',tenantId:'t'});assert.throws(()=>decideApproval(req,{reviewerId:'m',reviewerTenantId:'t',decision:'approve',canApprove:true,expectedVersion:1}))});
 test('basket rejects duplicate products and closed cycles',()=>{assert.throws(()=>validateBasketItems([{productId:'p',quantity:1},{productId:'p',quantity:2}]));assert.throws(()=>assertCycleOpen({status:'CLOSED',cutoffAt:new Date(Date.now()+60000).toISOString()}))});
 test('farmer listings are invisible until approved by admin',()=>{const l={id:'l',status:'UNDER_REVIEW'};assert.equal(customerVisibleListing(l),false);assert.equal(transitionListing(l,'APPROVED',{actorId:'admin',reason:'verified',admin:true}).status,'APPROVED');assert.throws(()=>transitionListing(l,'APPROVED',{actorId:'farmer',reason:'self',admin:false}))});
+
+test('authorization uses own grants only and safely denies prototype keys and malformed grants',()=>{
+  const grants={farmer:{listings:['view']}};
+  assert.equal(allowedSimple({roles:['farmer'],roleGrants:grants,resource:'listings',action:'view'}),true);
+  for(const resource of ['toString','constructor','__proto__'])assert.equal(allowedSimple({roles:['farmer'],roleGrants:grants,resource,action:'view'}),false);
+  assert.equal(allowedSimple({roles:['toString'],roleGrants:{},resource:'listings',action:'view'}),false);
+  assert.equal(allowedSimple({roles:['farmer'],roleGrants:{farmer:{listings:'view'}},resource:'listings',action:'view'}),false);
+  assert.equal(allowedSimple({roles:['farmer'],roleGrants:Object.create({farmer:{listings:['view']}}),resource:'listings',action:'view'}),false);
+});
+test('authorization rejects unknown actions and requireSimple returns a stable forbidden error',()=>{
+  assert.equal(allowedSimple({roles:['admin'],roleGrants:{admin:{orders:['view']}},resource:'orders',action:'execute'}),false);
+  assert.throws(()=>requireSimple({roles:['customer'],roleGrants:{customer:{orders:['view']}},resource:'orders',action:'delete'}),error=>error.status===403&&error.code==='FORBIDDEN');
+});
