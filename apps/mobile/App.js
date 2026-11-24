@@ -35,6 +35,7 @@ export default function App() {
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [page, setPage] = useState('home');
 
   const loadOrders = useCallback(async activeToken => {
@@ -80,7 +81,7 @@ export default function App() {
     finally { setBusy(false); }
   };
   const loadCatalogue = async () => {
-    setCatalogueBusy(true); setError('');
+    setCatalogueBusy(true); setError(''); setNotice('');
     try {
       const products = await apiRequest('/catalogue/products', { token });
       setCatalogue(Array.isArray(products) ? products : []);
@@ -102,7 +103,7 @@ export default function App() {
       const cycle = await apiRequest('/monthly-cycles/current', { token });
       if (!cycle?.id) { setError('There is no open monthly cycle at the moment.'); return; }
       await apiRequest('/customers/me/recurring-basket', { token, method: 'PUT', body: { cycleId: cycle.id, items } });
-      setError('Your recurring basket has been saved for the next eligible cycle.');
+      setError(''); setNotice('Your recurring basket has been saved for the next eligible cycle.');
     } catch (e) { setError(e.message); }
   };
   const disconnect = async () => {
@@ -153,6 +154,7 @@ export default function App() {
         <Text style={styles.body}>{principal?.displayName || principal?.name || 'Signed-in account'}</Text>
         <View style={styles.roleRow}>{(principal?.roles || []).map(role => <Text key={role} style={styles.role}>{role}</Text>)}</View>
       </View>
+      {!!notice && <Message>{notice}</Message>}
       <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{principal?.roles?.includes('admin') ? 'Operations overview' : 'Your orders'}</Text><Button title={refreshing ? 'Refreshing…' : 'Refresh'} secondary onPress={() => loadOrders(token)} disabled={refreshing} /></View>
       {!!error && <Message error>{error}</Message>}
       {refreshing && orders.length === 0 && !dashboard ? <ActivityIndicator color={colors.forest} /> :
