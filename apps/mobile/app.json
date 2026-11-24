@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Kirani",
+    "slug": "kirani",
+    "scheme": "kirani",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.varadatechworks.kirani"
+    },
+    "android": {
+      "package": "com.varadatechworks.kirani",
+      "adaptiveIcon": {
+        "backgroundColor": "#174c3c"
+      },
+      "permissions": []
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "eas": {
+        "projectId": "SET_AFTER_EAS_PROJECT_CREATE"
+      }
+    }
+  }
+}
