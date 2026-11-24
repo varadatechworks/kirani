@@ -101,10 +101,10 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 | Reports and analytics | 75% | 70% | 80% | Operations, finance reconciliation and traceability/quality aggregates; date filters, drill-down, exports, scheduled snapshots and source-ledger cross-checks remain |
 | Audit, privacy and production security | 60% | 50% | 60% | Tenant/role checks, append-only ledgers, correlation/audit events, bounded per-IP API rate limit and security response headers; distributed gateway limits, threat modelling, PII retention/redaction, MFA, secret rotation and penetration testing remain |
 | Localization and accessibility | 35% | 30% | 25% | Complete Kannada translations, locale coverage, keyboard/screen-reader and accessibility testing |
-| Native Android/iOS applications | 0% | 0% | 0% | Not started; current customer/farmer/operator experiences are responsive web/PWA previews |
+| Native Android/iOS applications | 10% | 25% | 10% | Expo Android/iOS shell, secure token storage, API client, customer order/admin overview and EAS profiles added; production sign-in/OTP/MFA, customer catalogue/basket/checkout, farmer/mill/delivery workflows, push/deep links, device tests, app signing and store release remain |
 | Deployment and operations | 50% | 30% | 40% | Production hosting/identity/provider setup, backups/restore drill, monitoring, load test and rollback runbook |
 
-No single product-wide completion percentage is asserted here. The matrix makes the remaining work visible; UAT, production credentials and business/legal approvals remain separate release gates.
+Native app baseline added under `apps/mobile/` with Expo SDK 54. The development token connection is deliberately disabled by default and must never be used in production; the current backend has no production sign-in/OTP/MFA/refresh-token endpoint. Native CI must pass the Android and iOS JavaScript bundle export before the app shell is considered build-validated. No single product-wide completion percentage is asserted here. The matrix makes the remaining work visible; UAT, production credentials and business/legal approvals remain separate release gates.
 
 ## Inventory control implementation update
 
