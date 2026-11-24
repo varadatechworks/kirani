@@ -28,6 +28,9 @@ export default function App() {
   const [draftToken, setDraftToken] = useState('');
   const [orders, setOrders] = useState([]);
   const [dashboard, setDashboard] = useState(null);
+  const [catalogue, setCatalogue] = useState([]);
+  const [basket, setBasket] = useState({});
+  const [catalogueBusy, setCatalogueBusy] = useState(false);
   const [principal, setPrincipal] = useState(null);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,6 +79,32 @@ export default function App() {
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
+  const loadCatalogue = async () => {
+    setCatalogueBusy(true); setError('');
+    try {
+      const products = await apiRequest('/catalogue/products', { token });
+      setCatalogue(Array.isArray(products) ? products : []);
+      const saved = await apiRequest('/customers/me/recurring-basket', { token });
+      if (saved?.items?.length) setBasket(Object.fromEntries(saved.items.map(item => [item.productId, { productId: item.productId, quantity: Number(item.quantity), unitCode: item.unitCode }])));
+    } catch (e) { setError(e.message); }
+    finally { setCatalogueBusy(false); }
+  };
+  const changeQuantity = (product, delta) => setBasket(current => {
+    const next = { ...current }; const quantity = (next[product.id]?.quantity || 0) + delta;
+    if (quantity <= 0) delete next[product.id];
+    else next[product.id] = { productId: product.id, quantity, unitCode: product.baseUnit };
+    return next;
+  });
+  const saveRecurringBasket = async () => {
+    const items = Object.values(basket);
+    if (!items.length) { setError('Add at least one product before saving your basket.'); return; }
+    try {
+      const cycle = await apiRequest('/monthly-cycles/current', { token });
+      if (!cycle?.id) { setError('There is no open monthly cycle at the moment.'); return; }
+      await apiRequest('/customers/me/recurring-basket', { token, method: 'PUT', body: { cycleId: cycle.id, items } });
+      setError('Your recurring basket has been saved for the next eligible cycle.');
+    } catch (e) { setError(e.message); }
+  };
   const disconnect = async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setPage('home'); setError('');
@@ -107,6 +136,18 @@ export default function App() {
     <View style={styles.topbar}><View><Text style={styles.brandSmall}>kirani</Text><Text style={styles.caption}>FROM SOURCE TO SOUL</Text></View><Pressable onPress={disconnect} accessibilityRole="button"><Text style={styles.disconnect}>Disconnect</Text></Pressable></View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}><Text style={styles.heroEyebrow}>YOUR KIRANI</Text><Text style={styles.heroTitle}>Good food. Clear origins.</Text><Text style={styles.heroBody}>Your monthly groceries, thoughtfully sourced and delivered.</Text></View>
+      {principal?.roles?.includes('customer') && <View style={styles.card}>
+        <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Shop & recurring basket</Text><Button title={catalogueBusy ? 'Loading…' : 'Load catalogue'} secondary onPress={loadCatalogue} disabled={catalogueBusy} /></View>
+        <Text style={styles.body}>Browse available products and save a versioned monthly basket. Final order confirmation remains a separate step.</Text>
+        {catalogueBusy && <ActivityIndicator color={colors.forest} />}
+        {catalogue.map(product => <View key={product.id} style={styles.productRow}>
+          <View style={styles.productInfo}><Text style={styles.orderId}>{product.name}</Text><Text style={styles.caption}>{product.category} · {product.baseUnit} · {money(product.priceMinor,product.currency)}</Text></View>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Remove one '+product.name} onPress={() => changeQuantity(product,-1)} style={styles.quantityButton}><Text style={styles.quantityText}>−</Text></Pressable>
+          <Text style={styles.quantityValue}>{basket[product.id]?.quantity || 0}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Add one '+product.name} onPress={() => changeQuantity(product,1)} style={styles.quantityButton}><Text style={styles.quantityText}>＋</Text></Pressable>
+        </View>)}
+        {catalogue.length > 0 && <Button title={'Save recurring basket ('+Object.keys(basket).length+' products)'} onPress={saveRecurringBasket} />}
+      </View>}
       <View style={styles.card}>
         <Text style={styles.eyebrow}>ACCOUNT</Text><Text style={styles.heading}>Welcome back</Text>
         <Text style={styles.body}>{principal?.displayName || principal?.name || 'Signed-in account'}</Text>
@@ -143,5 +184,5 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 17, gap: 8 }, eyebrow: { color: '#718b5d', fontSize: 9, fontWeight: '900', letterSpacing: 1.6 }, heading: { fontSize: 19, color: colors.ink, fontWeight: '800' }, body: { color: colors.muted, fontSize: 12, lineHeight: 18 }, fieldLabel: { fontSize: 11, color: colors.ink, fontWeight: '700', marginTop: 10 },
   input: { backgroundColor: 'white', borderWidth: 1, borderColor: colors.line, borderRadius: 11, padding: 12, fontSize: 12, color: colors.ink }, tokenInput: { minHeight: 100, textAlignVertical: 'top' }, button: { minHeight: 46, backgroundColor: colors.forest, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 7 }, buttonSecondary: { backgroundColor: '#eaf1df', minHeight: 38, marginTop: 0 }, buttonText: { color: 'white', fontWeight: '800', fontSize: 12 }, buttonSecondaryText: { color: colors.forest }, disabled: { opacity: .5 }, pressed: { opacity: .75 }, caption: { color: colors.muted, fontSize: 10 }, disconnect: { color: colors.forest, fontSize: 11, fontWeight: '800' },
   message: { backgroundColor: '#edf3e6', padding: 11, borderRadius: 10, marginTop: 8 }, messageText: { color: colors.forest, fontSize: 11, lineHeight: 16 }, errorMessage: { backgroundColor: '#fff0ec' }, errorText: { color: colors.red, fontSize: 11, lineHeight: 16 },
-  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 }, metricCard: { width: '48%', flexGrow: 1, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, gap: 7 }, metricValue: { fontSize: 22, fontWeight: '900', color: colors.forest }, sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 }, sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' }, orderCard: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, marginBottom: 9, gap: 5 }, orderTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, orderId: { fontSize: 12, color: colors.ink, fontWeight: '800' }, amount: { fontSize: 12, color: colors.forest, fontWeight: '900' }, roleRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' }, role: { color: colors.forest, backgroundColor: '#eaf1df', overflow: 'hidden', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, fontSize: 10, fontWeight: '800' }, footer: { alignItems: 'center', paddingVertical: 15 }, muted: { color: colors.muted, fontSize: 12 }
+  productRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.line }, productInfo: { flex: 1, gap: 3 }, quantityButton: { width: 34, height: 34, borderRadius: 9, backgroundColor: '#eaf1df', alignItems: 'center', justifyContent: 'center' }, quantityText: { color: colors.forest, fontSize: 19, fontWeight: '800' }, quantityValue: { minWidth: 22, textAlign: 'center', fontWeight: '800', color: colors.ink }, metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 }, metricCard: { width: '48%', flexGrow: 1, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, gap: 7 }, metricValue: { fontSize: 22, fontWeight: '900', color: colors.forest }, sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 }, sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' }, orderCard: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, marginBottom: 9, gap: 5 }, orderTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, orderId: { fontSize: 12, color: colors.ink, fontWeight: '800' }, amount: { fontSize: 12, color: colors.forest, fontWeight: '900' }, roleRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' }, role: { color: colors.forest, backgroundColor: '#eaf1df', overflow: 'hidden', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, fontSize: 10, fontWeight: '800' }, footer: { alignItems: 'center', paddingVertical: 15 }, muted: { color: colors.muted, fontSize: 12 }
 });
