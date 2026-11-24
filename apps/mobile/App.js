@@ -28,6 +28,10 @@ export default function App() {
   const [draftToken, setDraftToken] = useState('');
   const [orders, setOrders] = useState([]);
   const [dashboard, setDashboard] = useState(null);
+  const [farmerProfile, setFarmerProfile] = useState(null);
+  const [farmerOrders, setFarmerOrders] = useState([]);
+  const [farmDraft, setFarmDraft] = useState({ farmName: '', farmType: 'INDIVIDUAL', village: '', taluk: '', district: '', state: 'Karnataka', postalCode: '', farmArea: '', farmAreaUnit: 'ACRE' });
+  const [farmerBusy, setFarmerBusy] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
   const [basket, setBasket] = useState({});
   const [catalogueBusy, setCatalogueBusy] = useState(false);
@@ -48,10 +52,19 @@ export default function App() {
         setDashboard(null);
       } else if (identity.roles?.includes('admin')) {
         const result = await apiRequest('/admin/dashboard', { token: activeToken });
-        setDashboard(result); setOrders([]);
+        setDashboard(result); setOrders([]); setFarmerOrders([]);
+      } else if (identity.roles?.includes('farmer')) {
+        const [profile, purchaseOrders] = await Promise.all([
+          apiRequest('/farmers/me/profile', { token: activeToken }),
+          apiRequest('/farmers/me/procurement-orders', { token: activeToken })
+        ]);
+        setFarmerProfile(profile || null);
+        if (profile) setFarmDraft({ farmName: profile.farmName || '', farmType: profile.farmType || 'INDIVIDUAL', village: profile.village || '', taluk: profile.taluk || '', district: profile.district || '', state: profile.state || 'Karnataka', postalCode: profile.postalCode || '', farmArea: profile.farmArea || '', farmAreaUnit: profile.farmAreaUnit || 'ACRE' });
+        setFarmerOrders(Array.isArray(purchaseOrders) ? purchaseOrders : []);
+        setDashboard(null); setOrders([]); setError('');
       } else {
-        setDashboard(null); setOrders([]);
-        setError('Your role is connected. This role-specific mobile workspace is being completed.');
+        setDashboard(null); setOrders([]); setFarmerOrders([]);
+        setError('This account role does not yet have a connected mobile workspace.');
       }
     } catch (e) {
       setError(e.message);
@@ -105,6 +118,25 @@ export default function App() {
       setError(''); setNotice('Your recurring basket has been saved for the next eligible cycle.');
     } catch (e) { setError(e.message); }
   };
+  const saveFarmerProfile = async () => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const payload = { ...farmDraft, farmArea: farmDraft.farmArea ? Number(farmDraft.farmArea) : null };
+      const saved = await apiRequest('/farmers/me/profile', { token, method: 'PUT', body: payload });
+      setFarmerProfile(saved); setNotice('Farm profile submitted. Verification status: ' + (saved.verificationStatus || 'PENDING') + '.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
+  const respondToPurchaseOrder = async (id, decision) => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      await apiRequest('/farmers/me/procurement-orders/' + id + '/response', { token, method: 'POST', body: { decision, reason: decision === 'accept' ? 'Accepted through Kirani mobile app.' : 'Declined through Kirani mobile app.' } });
+      const updated = await apiRequest('/farmers/me/procurement-orders', { token });
+      setFarmerOrders(Array.isArray(updated) ? updated : []);
+      setNotice('Purchase order ' + (decision === 'accept' ? 'accepted' : 'declined') + ' successfully.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
   const disconnect = async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setError('');
@@ -136,6 +168,24 @@ export default function App() {
     <View style={styles.topbar}><View><Text style={styles.brandSmall}>kirani</Text><Text style={styles.caption}>FROM SOURCE TO SOUL</Text></View><Pressable onPress={disconnect} accessibilityRole="button"><Text style={styles.disconnect}>Disconnect</Text></Pressable></View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}><Text style={styles.heroEyebrow}>YOUR KIRANI</Text><Text style={styles.heroTitle}>Good food. Clear origins.</Text><Text style={styles.heroBody}>Your monthly groceries, thoughtfully sourced and delivered.</Text></View>
+      {principal?.roles?.includes('farmer') && <View style={styles.card}>
+        <Text style={styles.eyebrow}>FARMER WORKSPACE</Text><Text style={styles.sectionTitle}>Farm profile</Text>
+        <Text style={styles.body}>Keep your farm details current. Submitting changes sends the profile for verification again.</Text>
+        {[
+          ['Farm name','farmName'],['Village','village'],['Taluk (optional)','taluk'],['District','district'],['State','state'],['6-digit PIN code','postalCode'],['Farm area (optional)','farmArea']
+        ].map(([label,key]) => <View key={key}><Text style={styles.fieldLabel}>{label}</Text><TextInput value={String(farmDraft[key] ?? '')} onChangeText={value => setFarmDraft(current => ({ ...current, [key]: value }))} keyboardType={key === 'postalCode' || key === 'farmArea' ? 'numeric' : 'default'} maxLength={key === 'postalCode' ? 6 : 160} style={styles.input} accessibilityLabel={label} /></View>)}
+        <Text style={styles.caption}>Profile status: {farmerProfile?.verificationStatus || 'Not submitted'}</Text>
+        {!!farmerProfile?.verificationNote && <Message>{farmerProfile.verificationNote}</Message>}
+        <Button title={farmerBusy ? 'Saving…' : 'Submit farm profile'} onPress={saveFarmerProfile} disabled={farmerBusy} />
+      </View>}
+      {principal?.roles?.includes('farmer') && <View style={styles.card}>
+        <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Purchase orders</Text><Button title="Refresh" secondary onPress={() => loadOrders(token)} disabled={refreshing || farmerBusy} /></View>
+        {farmerOrders.length === 0 ? <Text style={styles.body}>No purchase orders have been issued to your farm yet.</Text> : farmerOrders.map(po => <View key={po.id} style={styles.orderCard}>
+          <Text style={styles.orderId}>{po.poNumber}</Text><Text style={styles.body}>Status: {po.status} · Expected: {po.expectedDeliveryDate}</Text>
+          {(po.items || []).map(item => <Text key={item.id} style={styles.caption}>{item.quantityOrdered} {item.unitCode} · {money(item.lineTotalMinor, 'INR')}</Text>)}
+          {po.status === 'ISSUED' && <View style={styles.orderTop}><View style={{ flex: 1 }}><Button title="Accept" onPress={() => respondToPurchaseOrder(po.id, 'accept')} disabled={farmerBusy} /></View><View style={{ flex: 1 }}><Button title="Decline" secondary onPress={() => respondToPurchaseOrder(po.id, 'reject')} disabled={farmerBusy} /></View></View>}
+        </View>)}
+      </View>}
       {principal?.roles?.includes('customer') && <View style={styles.card}>
         <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Shop & recurring basket</Text><Button title={catalogueBusy ? 'Loading…' : 'Load catalogue'} secondary onPress={loadCatalogue} disabled={catalogueBusy} /></View>
         <Text style={styles.body}>Browse available products and save a versioned monthly basket. Final order confirmation remains a separate step.</Text>
@@ -169,7 +219,7 @@ export default function App() {
                 <Text style={styles.body}>{item.fulfilmentStatus || 'Status unavailable'} · Payment {item.paymentStatus || '—'}</Text>
                 <Text style={styles.caption}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : ''}</Text>
               </View>) :
-            <View style={styles.card}><Text style={styles.body}>Your account is authenticated. Role-specific features will appear here when their mobile workflows are connected.</Text></View>
+            <View style={styles.card}><Text style={styles.body}>Your account is authenticated. Additional role-specific features are being connected.</Text></View>
       }
       <View style={styles.footer}><Text style={styles.caption}>Kirani · Secure API connection</Text></View>
     </ScrollView>
