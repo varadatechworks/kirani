@@ -30,6 +30,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState(null);
   const [farmerProfile, setFarmerProfile] = useState(null);
   const [farmerOrders, setFarmerOrders] = useState([]);
+  const [processingJobs, setProcessingJobs] = useState([]);
   const [farmDraft, setFarmDraft] = useState({ farmName: '', farmType: 'INDIVIDUAL', village: '', taluk: '', district: '', state: 'Karnataka', postalCode: '', farmArea: '', farmAreaUnit: 'ACRE' });
   const [farmerBusy, setFarmerBusy] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
@@ -53,6 +54,10 @@ export default function App() {
       } else if (identity.roles?.includes('admin')) {
         const result = await apiRequest('/admin/dashboard', { token: activeToken });
         setDashboard(result); setOrders([]); setFarmerOrders([]);
+      } else if (identity.roles?.includes('mill_operator')) {
+        const jobs = await apiRequest('/mill/processing/jobs', { token: activeToken });
+        setProcessingJobs(Array.isArray(jobs) ? jobs : []);
+        setFarmerOrders([]); setFarmerProfile(null); setDashboard(null); setOrders([]); setError('');
       } else if (identity.roles?.includes('farmer')) {
         const [profile, purchaseOrders] = await Promise.all([
           apiRequest('/farmers/me/profile', { token: activeToken }),
@@ -127,6 +132,16 @@ export default function App() {
     } catch (e) { setError(e.message); }
     finally { setFarmerBusy(false); }
   };
+  const updateProcessingJob = async (id, action) => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      await apiRequest('/mill/processing/jobs/' + id + '/' + action, { token, method: 'POST', body: {} });
+      const jobs = await apiRequest('/mill/processing/jobs', { token });
+      setProcessingJobs(Array.isArray(jobs) ? jobs : []);
+      setNotice(action === 'accept' ? 'Processing job accepted.' : 'Physical material receipt confirmed.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
   const respondToPurchaseOrder = async (id, decision) => {
     setFarmerBusy(true); setError(''); setNotice('');
     try {
@@ -168,6 +183,17 @@ export default function App() {
     <View style={styles.topbar}><View><Text style={styles.brandSmall}>kirani</Text><Text style={styles.caption}>FROM SOURCE TO SOUL</Text></View><Pressable onPress={disconnect} accessibilityRole="button"><Text style={styles.disconnect}>Disconnect</Text></Pressable></View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}><Text style={styles.heroEyebrow}>YOUR KIRANI</Text><Text style={styles.heroTitle}>Good food. Clear origins.</Text><Text style={styles.heroBody}>Your monthly groceries, thoughtfully sourced and delivered.</Text></View>
+      {principal?.roles?.includes('mill_operator') && <View style={styles.card}>
+        <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Mill processing jobs</Text><Button title="Refresh" secondary onPress={() => loadOrders(token)} disabled={refreshing || farmerBusy} /></View>
+        <Text style={styles.body}>Only jobs assigned to your approved facility are shown. Confirm acceptance and physical material receipt before recording processing stages.</Text>
+        {processingJobs.length === 0 ? <Text style={styles.body}>No processing jobs are currently assigned to your facility.</Text> : processingJobs.map(job => <View key={job.id} style={styles.orderCard}>
+          <Text style={styles.orderId}>{job.jobNumber}</Text><Text style={styles.body}>{job.facilityName} · {job.productName}</Text>
+          <Text style={styles.caption}>Source lot {job.sourceLotCode} · {job.inputQuantity} {job.unitCode}</Text>
+          <Text style={styles.caption}>Process: {job.processName} · Status: {job.status}</Text>
+          {job.status === 'ASSIGNED' && <Button title="Accept job" onPress={() => updateProcessingJob(job.id, 'accept')} disabled={farmerBusy} />}
+          {job.status === 'ACCEPTED' && <Button title="Confirm material received" onPress={() => updateProcessingJob(job.id, 'receive')} disabled={farmerBusy} />}
+        </View>)}
+      </View>}
       {principal?.roles?.includes('farmer') && <View style={styles.card}>
         <Text style={styles.eyebrow}>FARMER WORKSPACE</Text><Text style={styles.sectionTitle}>Farm profile</Text>
         <Text style={styles.body}>Keep your farm details current. Submitting changes sends the profile for verification again.</Text>
