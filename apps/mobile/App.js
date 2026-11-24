@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Pressable, SafeAreaView, ScrollView,
+  ActivityIndicator, Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -36,7 +36,6 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [page, setPage] = useState('home');
 
   const loadOrders = useCallback(async activeToken => {
     setRefreshing(true); setError('');
@@ -108,7 +107,7 @@ export default function App() {
   };
   const disconnect = async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setPage('home'); setError('');
+    setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setError('');
   };
 
   if (busy) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={colors.forest} /><Text style={styles.muted}>Preparing Kirani…</Text></SafeAreaView>;
@@ -164,13 +163,12 @@ export default function App() {
               <View key={label} style={styles.metricCard}><Text style={styles.caption}>{label}</Text><Text style={styles.metricValue}>{value ?? '—'}</Text></View>)}
           </View> :
           principal?.roles?.includes('customer') ?
-            <FlatList data={orders} scrollEnabled={false} keyExtractor={item => String(item.id)}
-              ListEmptyComponent={<View style={styles.card}><Text style={styles.body}>No orders to show yet.</Text></View>}
-              renderItem={({ item }) => <View style={styles.orderCard}>
+            orders.length === 0 ? <View style={styles.card}><Text style={styles.body}>No orders to show yet.</Text></View> :
+              orders.map(item => <View key={String(item.id)} style={styles.orderCard}>
                 <View style={styles.orderTop}><Text style={styles.orderId}>Order {String(item.id).slice(0, 8)}</Text><Text style={styles.amount}>{money(item.totalMinor, item.currency)}</Text></View>
                 <Text style={styles.body}>{item.fulfilmentStatus || 'Status unavailable'} · Payment {item.paymentStatus || '—'}</Text>
                 <Text style={styles.caption}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : ''}</Text>
-              </View>} /> :
+              </View>) :
             <View style={styles.card}><Text style={styles.body}>Your account is authenticated. Role-specific features will appear here when their mobile workflows are connected.</Text></View>
       }
       <View style={styles.footer}><Text style={styles.caption}>Kirani · Secure API connection</Text></View>
