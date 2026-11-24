@@ -18,11 +18,8 @@
       },
       "permissions": []
     },
-    "plugins": ["expo-secure-store"],
-    "extra": {
-      "eas": {
-        "projectId": "SET_AFTER_EAS_PROJECT_CREATE"
-      }
-    }
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }
