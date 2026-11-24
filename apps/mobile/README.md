@@ -41,7 +41,7 @@ npx expo run:android
 npx expo run:ios
 ```
 
-For cloud builds, configure an EAS project, replace `SET_AFTER_EAS_PROJECT_CREATE` with the EAS project ID, then use `eas build --profile preview --platform android` or `eas build --profile production --platform all`.
+For cloud builds, run `npx eas-cli init` from this directory to link/create the EAS project, then use `npx eas-cli build --profile preview --platform android` or `npx eas-cli build --profile production --platform all`.
 
 Bundle identifiers are provisional: `com.varadatechworks.kirani`. Confirm ownership/availability before publishing. App signing, store accounts, privacy declarations, screenshots, push credentials and store review are external release tasks.
 
