@@ -27,6 +27,7 @@ export default function App() {
   const [token, setToken] = useState(null);
   const [draftToken, setDraftToken] = useState('');
   const [orders, setOrders] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
   const [principal, setPrincipal] = useState(null);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,12 +37,19 @@ export default function App() {
   const loadOrders = useCallback(async activeToken => {
     setRefreshing(true); setError('');
     try {
-      const [identity, result] = await Promise.all([
-        apiRequest('/session/me', { token: activeToken }),
-        apiRequest('/customers/me/orders', { token: activeToken })
-      ]);
+      const identity = await apiRequest('/session/me', { token: activeToken });
       setPrincipal(identity);
-      setOrders(Array.isArray(result) ? result : (result?.items || []));
+      if (identity.roles?.includes('customer')) {
+        const result = await apiRequest('/customers/me/orders', { token: activeToken });
+        setOrders(Array.isArray(result) ? result : (result?.items || []));
+        setDashboard(null);
+      } else if (identity.roles?.includes('admin')) {
+        const result = await apiRequest('/admin/dashboard', { token: activeToken });
+        setDashboard(result); setOrders([]);
+      } else {
+        setDashboard(null); setOrders([]);
+        setError('Your role is connected. This role-specific mobile workspace is being completed.');
+      }
     } catch (e) {
       setError(e.message);
       if (e.status === 401) { await SecureStore.deleteItemAsync(TOKEN_KEY); setToken(null); setPrincipal(null); }
@@ -70,7 +78,7 @@ export default function App() {
   };
   const disconnect = async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    setToken(null); setPrincipal(null); setOrders([]); setPage('home'); setError('');
+    setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setPage('home'); setError('');
   };
 
   if (busy) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={colors.forest} /><Text style={styles.muted}>Preparing Kirani…</Text></SafeAreaView>;
@@ -104,16 +112,23 @@ export default function App() {
         <Text style={styles.body}>{principal?.displayName || principal?.name || 'Signed-in account'}</Text>
         <View style={styles.roleRow}>{(principal?.roles || []).map(role => <Text key={role} style={styles.role}>{role}</Text>)}</View>
       </View>
-      <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Your orders</Text><Button title={refreshing ? 'Refreshing…' : 'Refresh'} secondary onPress={() => loadOrders(token)} disabled={refreshing} /></View>
+      <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{principal?.roles?.includes('admin') ? 'Operations overview' : 'Your orders'}</Text><Button title={refreshing ? 'Refreshing…' : 'Refresh'} secondary onPress={() => loadOrders(token)} disabled={refreshing} /></View>
       {!!error && <Message error>{error}</Message>}
-      {refreshing && orders.length === 0 ? <ActivityIndicator color={colors.forest} /> :
-        <FlatList data={orders} scrollEnabled={false} keyExtractor={item => String(item.id)}
-          ListEmptyComponent={<View style={styles.card}><Text style={styles.body}>No orders to show yet.</Text></View>}
-          renderItem={({ item }) => <View style={styles.orderCard}>
-            <View style={styles.orderTop}><Text style={styles.orderId}>Order {String(item.id).slice(0, 8)}</Text><Text style={styles.amount}>{money(item.totalMinor, item.currency)}</Text></View>
-            <Text style={styles.body}>{item.fulfilmentStatus || 'Status unavailable'} · Payment {item.paymentStatus || '—'}</Text>
-            <Text style={styles.caption}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : ''}</Text>
-          </View>} />
+      {refreshing && orders.length === 0 && !dashboard ? <ActivityIndicator color={colors.forest} /> :
+        principal?.roles?.includes('admin') && dashboard ?
+          <View style={styles.metricGrid}>
+            {[['Orders this month',dashboard.ordersThisMonth],['Active farmers',dashboard.activeFarmers],['Listings to review',dashboard.pendingListings],['Open cycles',dashboard.openCycles],['Order value',money(dashboard.orderValueMinor,'INR')]].map(([label,value]) =>
+              <View key={label} style={styles.metricCard}><Text style={styles.caption}>{label}</Text><Text style={styles.metricValue}>{value ?? '—'}</Text></View>)}
+          </View> :
+          principal?.roles?.includes('customer') ?
+            <FlatList data={orders} scrollEnabled={false} keyExtractor={item => String(item.id)}
+              ListEmptyComponent={<View style={styles.card}><Text style={styles.body}>No orders to show yet.</Text></View>}
+              renderItem={({ item }) => <View style={styles.orderCard}>
+                <View style={styles.orderTop}><Text style={styles.orderId}>Order {String(item.id).slice(0, 8)}</Text><Text style={styles.amount}>{money(item.totalMinor, item.currency)}</Text></View>
+                <Text style={styles.body}>{item.fulfilmentStatus || 'Status unavailable'} · Payment {item.paymentStatus || '—'}</Text>
+                <Text style={styles.caption}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : ''}</Text>
+              </View>} /> :
+            <View style={styles.card}><Text style={styles.body}>Your account is authenticated. Role-specific features will appear here when their mobile workflows are connected.</Text></View>
       }
       <View style={styles.footer}><Text style={styles.caption}>Kirani · Secure API connection</Text></View>
     </ScrollView>
@@ -128,5 +143,5 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 17, gap: 8 }, eyebrow: { color: '#718b5d', fontSize: 9, fontWeight: '900', letterSpacing: 1.6 }, heading: { fontSize: 19, color: colors.ink, fontWeight: '800' }, body: { color: colors.muted, fontSize: 12, lineHeight: 18 }, fieldLabel: { fontSize: 11, color: colors.ink, fontWeight: '700', marginTop: 10 },
   input: { backgroundColor: 'white', borderWidth: 1, borderColor: colors.line, borderRadius: 11, padding: 12, fontSize: 12, color: colors.ink }, tokenInput: { minHeight: 100, textAlignVertical: 'top' }, button: { minHeight: 46, backgroundColor: colors.forest, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 7 }, buttonSecondary: { backgroundColor: '#eaf1df', minHeight: 38, marginTop: 0 }, buttonText: { color: 'white', fontWeight: '800', fontSize: 12 }, buttonSecondaryText: { color: colors.forest }, disabled: { opacity: .5 }, pressed: { opacity: .75 }, caption: { color: colors.muted, fontSize: 10 }, disconnect: { color: colors.forest, fontSize: 11, fontWeight: '800' },
   message: { backgroundColor: '#edf3e6', padding: 11, borderRadius: 10, marginTop: 8 }, messageText: { color: colors.forest, fontSize: 11, lineHeight: 16 }, errorMessage: { backgroundColor: '#fff0ec' }, errorText: { color: colors.red, fontSize: 11, lineHeight: 16 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 }, sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' }, orderCard: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, marginBottom: 9, gap: 5 }, orderTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, orderId: { fontSize: 12, color: colors.ink, fontWeight: '800' }, amount: { fontSize: 12, color: colors.forest, fontWeight: '900' }, roleRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' }, role: { color: colors.forest, backgroundColor: '#eaf1df', overflow: 'hidden', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, fontSize: 10, fontWeight: '800' }, footer: { alignItems: 'center', paddingVertical: 15 }, muted: { color: colors.muted, fontSize: 12 }
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 }, metricCard: { width: '48%', flexGrow: 1, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, gap: 7 }, metricValue: { fontSize: 22, fontWeight: '900', color: colors.forest }, sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 }, sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' }, orderCard: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, borderRadius: 13, padding: 14, marginBottom: 9, gap: 5 }, orderTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, orderId: { fontSize: 12, color: colors.ink, fontWeight: '800' }, amount: { fontSize: 12, color: colors.forest, fontWeight: '900' }, roleRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' }, role: { color: colors.forest, backgroundColor: '#eaf1df', overflow: 'hidden', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, fontSize: 10, fontWeight: '800' }, footer: { alignItems: 'center', paddingVertical: 15 }, muted: { color: colors.muted, fontSize: 12 }
 });
