@@ -1,0 +1,35 @@
+name: Mobile app validation
+on:
+  push:
+    branches: [feat/phase-1-foundation]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expo-bundle:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate Expo configuration
+        run: npx expo config --type public
+      - name: Bundle Android and iOS
+        run: npx expo export --platform all
