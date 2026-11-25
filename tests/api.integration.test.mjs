@@ -36,8 +36,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const otherAdminRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'admin','Admin') RETURNING id",[otherTenant])).rows[0].id;
   const otherAdminUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant admin',$2,'active') RETURNING id",[otherTenant,'other-admin-'+randomUUID()+'@kirani.test'])).rows[0].id;
   await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[otherAdminUser,otherAdminRole]);
+  const otherCustomerRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'customer','Customer') RETURNING id",[otherTenant])).rows[0].id;
+  const otherCustomerUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant customer',$2,'active') RETURNING id",[otherTenant,'other-customer-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[otherCustomerUser,otherCustomerRole]);
   const otherEnc=v=>Buffer.from(JSON.stringify(v)).toString('base64url'),otherHeader=otherEnc({alg:'HS256',typ:'JWT'}),otherClaims=otherEnc({sub:otherAdminUser,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['admin']}),otherUnsigned=otherHeader+'.'+otherClaims;
   tokens.otherAdmin=otherUnsigned+'.'+createHmac('sha256',secret).update(otherUnsigned).digest('base64url');
+  const otherCustomerClaims=otherEnc({sub:otherCustomerUser,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['customer']}),otherCustomerUnsigned=otherHeader+'.'+otherCustomerClaims;
+  tokens.otherCustomer=otherCustomerUnsigned+'.'+createHmac('sha256',secret).update(otherCustomerUnsigned).digest('base64url');
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -301,6 +306,12 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(replay.status,200);assert.equal(replay.data.id,order.data.id);assert.equal(replay.data.idempotentReplay,true);
   const orderDetail=await call('customer','/orders/'+order.data.id);
   assert.equal(orderDetail.status,200);assert.equal(orderDetail.data.items.length,1);assert.equal(orderDetail.data.deliveryAddress.postalCode,'560001');
+  const crossTenantOrderRead=await call('otherCustomer','/orders/'+order.data.id);
+  assert.equal(crossTenantOrderRead.status,404);assert.equal(crossTenantOrderRead.error.code,'ORDER_NOT_FOUND');
+  const crossTenantAddressList=await call('otherCustomer','/customers/me/addresses');
+  assert.equal(crossTenantAddressList.status,200);assert.deepEqual(crossTenantAddressList.data,[]);
+  const otherTenantDashboard=await call('otherAdmin','/admin/dashboard');
+  assert.equal(otherTenantDashboard.status,200);assert.equal(otherTenantDashboard.data.openCycles,0);
   const packable=(await pool.query("SELECT il.id,il.quantity_available::text AS q FROM inventory_lots il JOIN processing_outputs po ON po.id=il.processing_output_id WHERE il.tenant_id=$1 AND po.job_id=$2 AND po.output_type='SALEABLE' AND il.status='AVAILABLE'",[tenant,millJob.data.id])).rows[0];
   const packed=await call('admin','/admin/packing/packages',{method:'POST',body:JSON.stringify({orderId:order.data.id,packageNumber:'PKG-CI-'+randomUUID(),items:[{orderItemId:orderDetail.data.items[0].id,quantity:.4,allocations:[{lotId:packable.id,quantity:.4}]}]})});
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
