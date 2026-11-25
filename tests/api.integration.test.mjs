@@ -468,6 +468,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   await pool.query("UPDATE users SET status='active' WHERE id=$1 AND tenant_id=$2",[userIds.admin,tenant]);
   const reactivatedAccount=await call('admin','/admin/dashboard');assert.equal(reactivatedAccount.status,200);
 
+  // Suspending a tenant blocks every active user in that workspace.
+  await pool.query("UPDATE tenants SET status='suspended' WHERE id=$1",[tenant]);
+  const suspendedTenant=await call('admin','/admin/dashboard');
+  assert.equal(suspendedTenant.status,403);assert.equal(suspendedTenant.error.code,'TENANT_INACTIVE');
+  await pool.query("UPDATE tenants SET status='active' WHERE id=$1",[tenant]);
+  const reactivatedTenant=await call('admin','/admin/dashboard');assert.equal(reactivatedTenant.status,200);
+
   const forbidden=await call('customer','/admin/dashboard');
   assert.equal(forbidden.status,403);
 });
