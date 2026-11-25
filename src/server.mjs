@@ -53,11 +53,13 @@ const authenticate=async req=>{
   try{claims=verifyAccessToken(token,{secret:process.env.AUTH_JWT_SECRET,issuer:process.env.AUTH_ISSUER,audience:process.env.AUTH_AUDIENCE});}
   catch{fail(401,'AUTH_INVALID','Your sign-in token is invalid or expired.');}
   const db=requireDb();
-  const result=await db.query(`SELECT u.id,u.tenant_id,u.display_name,u.email,u.phone,u.status,u.locale,
+  const result=await db.query(`SELECT u.id,u.tenant_id,u.display_name,u.email,u.phone,u.status,u.locale,t.status AS tenant_status,
     COALESCE(array_agg(DISTINCT r.code) FILTER(WHERE r.code IS NOT NULL),'{}') AS roles
-    FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id AND r.tenant_id=u.tenant_id
-    WHERE u.id=$1 AND u.tenant_id=$2 GROUP BY u.id`,[claims.userId,claims.tenantId]);
+    FROM users u JOIN tenants t ON t.id=u.tenant_id
+    LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id AND r.tenant_id=u.tenant_id
+    WHERE u.id=$1 AND u.tenant_id=$2 GROUP BY u.id,t.status`,[claims.userId,claims.tenantId]);
   if(!result.rowCount||result.rows[0].status!=='active')fail(401,'ACCOUNT_INACTIVE','This account is not active. Contact Kirani support.');
+  if(result.rows[0].tenant_status!=='active')fail(403,'TENANT_INACTIVE','This Kirani workspace is not active. Contact your workspace administrator.');
   const user=result.rows[0];
   if(!user.roles.length)fail(403,'ROLE_NOT_ASSIGNED','Your account has no active workspace role.');
   return {userId:user.id,tenantId:user.tenant_id,displayName:user.display_name,email:user.email,phone:user.phone,locale:user.locale,roles:user.roles,sessionId:claims.sessionId};
