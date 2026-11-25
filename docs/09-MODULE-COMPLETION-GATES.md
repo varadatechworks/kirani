@@ -192,6 +192,22 @@ Automated Razorpay refund submission, bank payout integration, email/SMS/WhatsAp
 
 The in-process limiter is a single-instance safeguard, not a distributed quota. Production multi-instance deployments should enforce an additional shared gateway/WAF limit. MFA, identity-provider integration, secret rotation, threat modelling and penetration testing remain release gates.
 
+## Completed module slice: tenant access enforcement
+
+**Status: Code complete for the API authorization slice; UAT/release verification remains separate.**
+
+Delivered on `feat/phase-1-foundation`:
+- Each authenticated API request resolves current user status and role membership from PostgreSQL rather than trusting stale role claims embedded in the JWT.
+- User accounts that are suspended, deactivated or otherwise not active are denied.
+- Tenant status is checked in the same tenant-scoped identity query; a suspended tenant blocks all its users, including users with otherwise valid access tokens.
+- A user with no current role is denied, and removing/restoring a role takes effect immediately without waiting for token expiry.
+- Regression tests cover role revocation/restoration, account suspension/reactivation, tenant suspension/reactivation and cross-tenant resource access.
+- This closes the API-side tenant/account/role enforcement slice. It does **not** complete production sign-in, OTP/MFA, recovery, refresh-token issuance/revocation, permission-level RBAC administration, frontend tenant administration or security/UAT release gates.
+
+Verification:
+- [Authentication tenant-status implementation CI](https://github.com/varadatechworks/kirani/actions/runs/45568788191) passed.
+- [Role, account and tenant enforcement integration CI](https://github.com/varadatechworks/kirani/actions/runs/45568803780) passed, including PostgreSQL migrations and `npm run check`.
+
 ## Latest integrated verification
 
 [Kirani CI run 45011814692](https://github.com/varadatechworks/kirani/actions/runs/45011814692) completed successfully on the feature branch. PostgreSQL migrations and `npm run check` passed. Coverage includes customer order/checkout, demand planning, procurement and GRN, inventory reservation expiry/ledger/recall, mill processing, package trace and QR label generation, delivery/POD, signed Razorpay webhook replay and duplicate-capture handling, refund reconciliation, farmer settlement maker-checker, loyalty expiry/referrals, notifications/support/reports, cross-tenant access and rate-limiter behavior.
