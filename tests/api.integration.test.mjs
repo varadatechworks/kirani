@@ -43,6 +43,15 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   tokens.otherAdmin=otherUnsigned+'.'+createHmac('sha256',secret).update(otherUnsigned).digest('base64url');
   const otherCustomerClaims=otherEnc({sub:otherCustomerUser,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:['customer']}),otherCustomerUnsigned=otherHeader+'.'+otherCustomerClaims;
   tokens.otherCustomer=otherCustomerUnsigned+'.'+createHmac('sha256',secret).update(otherCustomerUnsigned).digest('base64url');
+  const otherMillRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'mill_operator','Mill operator') RETURNING id",[otherTenant])).rows[0].id;
+  const otherMillUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant mill operator',$2,'active') RETURNING id",[otherTenant,'other-mill-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[otherMillUser,otherMillRole]);
+  const otherDeliveryRole=(await pool.query("INSERT INTO roles(tenant_id,code,name) VALUES($1,'delivery_operator','Delivery operator') RETURNING id",[otherTenant])).rows[0].id;
+  const otherDeliveryUser=(await pool.query("INSERT INTO users(tenant_id,display_name,email,status) VALUES($1,'Other tenant delivery operator',$2,'active') RETURNING id",[otherTenant,'other-delivery-'+randomUUID()+'@kirani.test'])).rows[0].id;
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[otherDeliveryUser,otherDeliveryRole]);
+  const tokenForOther=(userId,role)=>{const h=otherEnc({alg:'HS256',typ:'JWT'}),p=otherEnc({sub:userId,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]}),u=h+'.'+p;return u+'.'+createHmac('sha256',secret).update(u).digest('base64url');};
+  tokens.otherMill=tokenForOther(otherMillUser,'mill_operator');
+  tokens.otherDelivery=tokenForOther(otherDeliveryUser,'delivery_operator');
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -312,6 +321,16 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(crossTenantAddressList.status,200);assert.deepEqual(crossTenantAddressList.data,[]);
   const otherTenantDashboard=await call('otherAdmin','/admin/dashboard');
   assert.equal(otherTenantDashboard.status,200);assert.equal(otherTenantDashboard.data.openCycles,0);
+  const otherInventoryLocations=await call('otherAdmin','/admin/inventory/locations');
+  assert.equal(otherInventoryLocations.status,200);assert.deepEqual(otherInventoryLocations.data,[]);
+  const otherProcurementOrders=await call('otherAdmin','/admin/procurement/orders');
+  assert.equal(otherProcurementOrders.status,200);assert.deepEqual(otherProcurementOrders.data,[]);
+  const otherProcessingJobs=await call('otherAdmin','/admin/processing/jobs');
+  assert.equal(otherProcessingJobs.status,200);assert.deepEqual(otherProcessingJobs.data,[]);
+  const otherMillJobs=await call('otherMill','/mill/processing/jobs');
+  assert.equal(otherMillJobs.status,200);assert.deepEqual(otherMillJobs.data,[]);
+  const otherDeliveryAssignments=await call('otherDelivery','/delivery/assignments');
+  assert.equal(otherDeliveryAssignments.status,200);assert.deepEqual(otherDeliveryAssignments.data,[]);
   const packable=(await pool.query("SELECT il.id,il.quantity_available::text AS q FROM inventory_lots il JOIN processing_outputs po ON po.id=il.processing_output_id WHERE il.tenant_id=$1 AND po.job_id=$2 AND po.output_type='SALEABLE' AND il.status='AVAILABLE'",[tenant,millJob.data.id])).rows[0];
   const packed=await call('admin','/admin/packing/packages',{method:'POST',body:JSON.stringify({orderId:order.data.id,packageNumber:'PKG-CI-'+randomUUID(),items:[{orderItemId:orderDetail.data.items[0].id,quantity:.4,allocations:[{lotId:packable.id,quantity:.4}]}]})});
   assert.equal(packed.status,200);assert.equal(packed.data.status,'PACKED');assert.ok(packed.data.publicToken);
