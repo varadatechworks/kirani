@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, SafeAreaView, ScrollView,
+  ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -216,7 +216,7 @@ export default function App() {
       await apiRequest('/mill/processing/jobs/' + id + '/' + action, { token, method: 'POST', body: {} });
       const jobs = await apiRequest('/mill/processing/jobs', { token });
       setProcessingJobs(Array.isArray(jobs) ? jobs : []);
-      setNotice(action === 'accept' ? 'Processing job accepted.' : 'Physical material receipt confirmed.');
+      setNotice(action === 'accept' ? 'Processing job accepted.' : action === 'receive' ? 'Physical material receipt confirmed.' : 'Processing outputs dispatched to Kirani for inspection.');
     } catch (e) { setError(e.message); }
     finally { setFarmerBusy(false); }
   };
@@ -305,6 +305,7 @@ export default function App() {
           <Text style={styles.fieldLabel}>Quality result</Text><View style={styles.orderTop}>{['PASS','DEVIATION','FAIL'].map(value => <View key={value} style={{ flex: 1 }}><Button title={value} secondary={stageDraft.qcStatus !== value} onPress={() => setStageDraft(current => ({ ...current, qcStatus: value }))} /></View>)}</View>
           <Text style={styles.fieldLabel}>QC note (required for deviation/fail)</Text><TextInput style={styles.input} value={stageDraft.qcNote} onChangeText={value => setStageDraft(current => ({ ...current, qcNote: value }))} />
           <Button title={farmerBusy ? 'Saving…' : 'Record processing stage'} onPress={saveProcessingStage} disabled={farmerBusy} />
+          {processingStages.length > 0 && <Button title="Complete job & dispatch outputs" secondary onPress={() => Alert.alert('Complete processing job?', 'This consumes the reserved source lot and creates quarantined output lots for Kirani inspection. Continue only after all stages and QC checks are complete.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Dispatch outputs', onPress: () => updateProcessingJob(activeProcessingJob.id, 'complete') }])} disabled={farmerBusy} />}
         </View>}
       </View>}
       {principal?.roles?.includes('farmer') && <View style={styles.card}>
