@@ -48,7 +48,7 @@ export async function handleProcessingRoutes(ctx){
   const job=await db.query('SELECT id,facility_id FROM processing_jobs WHERE id=$1 AND tenant_id=$2',[stageList[1],auth.tenantId]);
   if(!job.rowCount)fail(404,'PROCESSING_JOB_NOT_FOUND','Processing job was not found.');
   await facilityAccess(db,job.rows[0].facility_id);
-  const q=await db.query(`SELECT s.*,o.id AS output_id,o.batch_code,o.output_name,o.output_type,o.quantity AS output_quantity,o.unit_code AS output_unit FROM processing_job_stages s LEFT JOIN processing_outputs o ON o.stage_id=s.id AND o.tenant_id=s.tenant_id WHERE s.tenant_id=$1 AND s.job_id=$2 ORDER BY s.sequence_no,o.created_at,o.id`,[auth.tenantId,stageList[1]]);
+  const q=await db.query(`SELECT s.*,o.id AS output_id,o.batch_code,o.output_name,o.output_type,o.quantity AS output_quantity,o.unit_code AS output_unit FROM processing_job_stages s LEFT JOIN processing_outputs o ON o.stage_id=s.id AND o.tenant_id=s.tenant_id WHERE s.tenant_id=$1 AND s.job_id=$2 ORDER BY s.sequence_no,o.id`,[auth.tenantId,stageList[1]]);
   const stages=new Map();
   for(const row of q.rows){
    if(!stages.has(row.id))stages.set(row.id,{id:row.id,sequence:Number(row.sequence_no),stageName:row.stage_name,machine:row.machine,inputQuantity:String(row.input_quantity),saleableQuantity:String(row.saleable_quantity),byproductQuantity:String(row.byproduct_quantity),wasteQuantity:String(row.waste_quantity),lossQuantity:String(row.loss_quantity),remainingQuantity:String(row.remaining_quantity),adjustmentQuantity:String(row.adjustment_quantity),moisturePercent:row.moisture_percent,startedAt:row.started_at,endedAt:row.ended_at,qcStatus:row.qc_status,qcNote:row.qc_note,variance:String(row.variance),outputs:[]});
