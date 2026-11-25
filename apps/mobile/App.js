@@ -32,6 +32,9 @@ export default function App() {
   const [farmerProfile, setFarmerProfile] = useState(null);
   const [farmerOrders, setFarmerOrders] = useState([]);
   const [processingJobs, setProcessingJobs] = useState([]);
+  const [activeProcessingJob, setActiveProcessingJob] = useState(null);
+  const [processingStages, setProcessingStages] = useState([]);
+  const [stageDraft, setStageDraft] = useState({ stageName: '', inputQuantity: '', outputName: '', batchCode: '', outputQuantity: '', wasteQuantity: '0', lossQuantity: '0', remainingQuantity: '0', adjustmentQuantity: '0', qcStatus: 'PASS', qcNote: '' });
   const [deliveryAssignments, setDeliveryAssignments] = useState([]);
   const [activeDelivery, setActiveDelivery] = useState(null);
   const [podDraft, setPodDraft] = useState({ receivedBy: '', reason: '', cashCollected: '0', items: {} });
@@ -178,6 +181,35 @@ export default function App() {
     } catch (e) { setError(e.message); }
     finally { setFarmerBusy(false); }
   };
+  const openProcessingJob = async job => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const stages = await apiRequest('/mill/processing/jobs/' + job.id + '/stages', { token });
+      const list = Array.isArray(stages) ? stages : [];
+      const previous = list[list.length - 1];
+      const inputQuantity = previous ? String(previous.saleableQuantity) : String(job.inputQuantity);
+      const sequence = previous ? previous.sequence + 1 : 1;
+      setActiveProcessingJob(job); setProcessingStages(list);
+      setStageDraft({ stageName: 'Stage ' + sequence, inputQuantity, outputName: job.productName, batchCode: job.jobNumber + '-S' + sequence, outputQuantity: inputQuantity, wasteQuantity: '0', lossQuantity: '0', remainingQuantity: '0', adjustmentQuantity: '0', qcStatus: 'PASS', qcNote: '' });
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
+  const saveProcessingStage = async () => {
+    if (!activeProcessingJob) return;
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const sequence = processingStages.length ? processingStages[processingStages.length - 1].sequence + 1 : 1;
+      const body = { stageName: stageDraft.stageName.trim(), sequence, inputQuantity: Number(stageDraft.inputQuantity), outputs: [{ type: 'SALEABLE', batchCode: stageDraft.batchCode.trim(), name: stageDraft.outputName.trim(), quantity: Number(stageDraft.outputQuantity) }], wasteQuantity: Number(stageDraft.wasteQuantity || 0), lossQuantity: Number(stageDraft.lossQuantity || 0), remainingQuantity: Number(stageDraft.remainingQuantity || 0), adjustmentQuantity: Number(stageDraft.adjustmentQuantity || 0), qcStatus: stageDraft.qcStatus, qcNote: stageDraft.qcNote };
+      await apiRequest('/mill/processing/jobs/' + activeProcessingJob.id + '/stages', { token, method: 'POST', body });
+      const stages = await apiRequest('/mill/processing/jobs/' + activeProcessingJob.id + '/stages', { token });
+      setProcessingStages(Array.isArray(stages) ? stages : []);
+      const last = stages[stages.length - 1];
+      const nextSequence = last.sequence + 1;
+      setStageDraft(current => ({ ...current, stageName: 'Stage ' + nextSequence, inputQuantity: String(last.saleableQuantity), outputName: activeProcessingJob.productName, batchCode: activeProcessingJob.jobNumber + '-S' + nextSequence, outputQuantity: String(last.saleableQuantity), wasteQuantity: '0', lossQuantity: '0', remainingQuantity: '0', adjustmentQuantity: '0', qcStatus: 'PASS', qcNote: '' }));
+      setNotice('Processing stage recorded. QC: ' + body.qcStatus + '.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
   const updateProcessingJob = async (id, action) => {
     setFarmerBusy(true); setError(''); setNotice('');
     try {
@@ -253,13 +285,27 @@ export default function App() {
       {principal?.roles?.includes('mill_operator') && <View style={styles.card}>
         <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Mill processing jobs</Text><Button title="Refresh" secondary onPress={() => loadOrders(token)} disabled={refreshing || farmerBusy} /></View>
         <Text style={styles.body}>Only jobs assigned to your approved facility are shown. Confirm acceptance and physical material receipt before recording processing stages.</Text>
-        {processingJobs.length === 0 ? <Text style={styles.body}>No processing jobs are currently assigned to your facility.</Text> : processingJobs.map(job => <View key={job.id} style={styles.orderCard}>
+        {!activeProcessingJob ? (processingJobs.length === 0 ? <Text style={styles.body}>No processing jobs are currently assigned to your facility.</Text> : processingJobs.map(job => <View key={job.id} style={styles.orderCard}>
           <Text style={styles.orderId}>{job.jobNumber}</Text><Text style={styles.body}>{job.facilityName} · {job.productName}</Text>
           <Text style={styles.caption}>Source lot {job.sourceLotCode} · {job.inputQuantity} {job.unitCode}</Text>
           <Text style={styles.caption}>Process: {job.processName} · Status: {job.status}</Text>
           {job.status === 'ASSIGNED' && <Button title="Accept job" onPress={() => updateProcessingJob(job.id, 'accept')} disabled={farmerBusy} />}
           {job.status === 'ACCEPTED' && <Button title="Confirm material received" onPress={() => updateProcessingJob(job.id, 'receive')} disabled={farmerBusy} />}
-        </View>)}
+          {['MATERIAL_RECEIVED','IN_PROGRESS','RECONCILIATION_PENDING','QC_PENDING'].includes(job.status) && <Button title="Open stage records" secondary onPress={() => openProcessingJob(job)} disabled={farmerBusy} />}
+        </View>)) : <View style={styles.orderCard}>
+          <View style={styles.sectionHead}><Text style={styles.orderId}>{activeProcessingJob.jobNumber} · Stage entry</Text><Button title="Back" secondary onPress={() => setActiveProcessingJob(null)} /></View>
+          <Text style={styles.caption}>Existing stages</Text>
+          {processingStages.map(stage => <View key={stage.id} style={styles.productRow}><View style={styles.productInfo}><Text style={styles.orderId}>{stage.sequence}. {stage.stageName}</Text><Text style={styles.caption}>Input {stage.inputQuantity} · Saleable {stage.saleableQuantity} · QC {stage.qcStatus}</Text></View></View>)}
+          <Text style={styles.fieldLabel}>Stage name</Text><TextInput style={styles.input} value={stageDraft.stageName} onChangeText={value => setStageDraft(current => ({ ...current, stageName: value }))} />
+          <Text style={styles.fieldLabel}>Input quantity ({activeProcessingJob.unitCode})</Text><TextInput style={styles.input} keyboardType="decimal-pad" editable={false} value={stageDraft.inputQuantity} />
+          <Text style={styles.fieldLabel}>Saleable output name</Text><TextInput style={styles.input} value={stageDraft.outputName} onChangeText={value => setStageDraft(current => ({ ...current, outputName: value }))} />
+          <Text style={styles.fieldLabel}>Output batch code</Text><TextInput style={styles.input} value={stageDraft.batchCode} onChangeText={value => setStageDraft(current => ({ ...current, batchCode: value }))} />
+          <Text style={styles.fieldLabel}>Saleable output quantity</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={stageDraft.outputQuantity} onChangeText={value => setStageDraft(current => ({ ...current, outputQuantity: value }))} />
+          {['wasteQuantity','lossQuantity','remainingQuantity','adjustmentQuantity'].map(key => <View key={key}><Text style={styles.fieldLabel}>{key.replace('Quantity',' quantity')}</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={stageDraft[key]} onChangeText={value => setStageDraft(current => ({ ...current, [key]: value }))} /></View>)}
+          <Text style={styles.fieldLabel}>Quality result</Text><View style={styles.orderTop}>{['PASS','DEVIATION','FAIL'].map(value => <View key={value} style={{ flex: 1 }}><Button title={value} secondary={stageDraft.qcStatus !== value} onPress={() => setStageDraft(current => ({ ...current, qcStatus: value }))} /></View>)}</View>
+          <Text style={styles.fieldLabel}>QC note (required for deviation/fail)</Text><TextInput style={styles.input} value={stageDraft.qcNote} onChangeText={value => setStageDraft(current => ({ ...current, qcNote: value }))} />
+          <Button title={farmerBusy ? 'Saving…' : 'Record processing stage'} onPress={saveProcessingStage} disabled={farmerBusy} />
+        </View>}
       </View>}
       {principal?.roles?.includes('farmer') && <View style={styles.card}>
         <Text style={styles.eyebrow}>FARMER WORKSPACE</Text><Text style={styles.sectionTitle}>Farm profile</Text>
