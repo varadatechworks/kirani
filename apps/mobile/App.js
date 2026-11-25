@@ -168,7 +168,7 @@ export default function App() {
   const previewOrder = async () => {
     setCheckoutBusy(true); setError(''); setNotice('');
     try {
-      if (!activeCycleId || !selectedAddressId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(deliveryDate)) throw new Error('Choose an available delivery address and enter a valid delivery date (YYYY-MM-DD).');
+      if (!activeCycleId || !selectedAddressId || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) throw new Error('Choose an available delivery address and enter a valid delivery date (YYYY-MM-DD).');
       const preview = await apiRequest('/customers/me/orders/preview', { token, method: 'POST', body: { cycleId: activeCycleId, addressId: selectedAddressId, deliveryDate } });
       setOrderPreview(preview); setCheckoutKey(current => current || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
     } catch (e) { setError(e.message); }
