@@ -4,6 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import * as Location from 'expo-location';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { apiRequest } from './src/api';
 import { API_BASE_URL, DEV_TOKEN_LOGIN } from './src/config';
@@ -31,6 +32,9 @@ export default function App() {
   const [farmerProfile, setFarmerProfile] = useState(null);
   const [farmerOrders, setFarmerOrders] = useState([]);
   const [processingJobs, setProcessingJobs] = useState([]);
+  const [deliveryAssignments, setDeliveryAssignments] = useState([]);
+  const [activeDelivery, setActiveDelivery] = useState(null);
+  const [podDraft, setPodDraft] = useState({ receivedBy: '', reason: '', cashCollected: '0', items: {} });
   const [farmDraft, setFarmDraft] = useState({ farmName: '', farmType: 'INDIVIDUAL', village: '', taluk: '', district: '', state: 'Karnataka', postalCode: '', farmArea: '', farmAreaUnit: 'ACRE' });
   const [farmerBusy, setFarmerBusy] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
@@ -54,6 +58,10 @@ export default function App() {
       } else if (identity.roles?.includes('admin')) {
         const result = await apiRequest('/admin/dashboard', { token: activeToken });
         setDashboard(result); setOrders([]); setFarmerOrders([]);
+      } else if (identity.roles?.includes('delivery_operator')) {
+        const assignments = await apiRequest('/delivery/assignments', { token: activeToken });
+        setDeliveryAssignments(Array.isArray(assignments) ? assignments : []);
+        setActiveDelivery(null); setProcessingJobs([]); setFarmerOrders([]); setDashboard(null); setOrders([]); setError('');
       } else if (identity.roles?.includes('mill_operator')) {
         const jobs = await apiRequest('/mill/processing/jobs', { token: activeToken });
         setProcessingJobs(Array.isArray(jobs) ? jobs : []);
@@ -132,6 +140,44 @@ export default function App() {
     } catch (e) { setError(e.message); }
     finally { setFarmerBusy(false); }
   };
+  const openDelivery = async id => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const detail = await apiRequest('/delivery/assignments/' + id, { token });
+      setActiveDelivery(detail);
+      setPodDraft({ receivedBy: '', reason: '', cashCollected: '0', items: Object.fromEntries((detail.items || []).map(item => [item.orderItemId, { quantityDelivered: '0', quantityRefused: '0', reason: '' }])) });
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
+  const captureDeliveryLocation = async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') throw new Error('Location permission is required to record a delivery event. Enable location access in device settings.');
+    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+  };
+  const startDelivery = async id => {
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const gps = await captureDeliveryLocation();
+      await apiRequest('/delivery/assignments/' + id + '/start', { token, method: 'POST', body: gps });
+      await openDelivery(id);
+      const assignments = await apiRequest('/delivery/assignments', { token }); setDeliveryAssignments(Array.isArray(assignments) ? assignments : []);
+      setNotice('Delivery started. Location captured successfully.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
+  const submitDeliveryPod = async () => {
+    if (!activeDelivery) return;
+    setFarmerBusy(true); setError(''); setNotice('');
+    try {
+      const gps = await captureDeliveryLocation();
+      const items = (activeDelivery.items || []).map(item => ({ orderItemId: item.orderItemId, quantityDelivered: Number(podDraft.items[item.orderItemId]?.quantityDelivered || 0), quantityRefused: Number(podDraft.items[item.orderItemId]?.quantityRefused || 0), reason: podDraft.items[item.orderItemId]?.reason || '' }));
+      await apiRequest('/delivery/assignments/' + activeDelivery.id + '/pod', { token, method: 'POST', body: { ...gps, receivedBy: podDraft.receivedBy, reason: podDraft.reason, cashCollected: Number(podDraft.cashCollected || 0), items } });
+      const assignments = await apiRequest('/delivery/assignments', { token }); setDeliveryAssignments(Array.isArray(assignments) ? assignments : []);
+      setActiveDelivery(null); setNotice('Proof of delivery submitted with GPS coordinates.');
+    } catch (e) { setError(e.message); }
+    finally { setFarmerBusy(false); }
+  };
   const updateProcessingJob = async (id, action) => {
     setFarmerBusy(true); setError(''); setNotice('');
     try {
@@ -183,6 +229,27 @@ export default function App() {
     <View style={styles.topbar}><View><Text style={styles.brandSmall}>kirani</Text><Text style={styles.caption}>FROM SOURCE TO SOUL</Text></View><Pressable onPress={disconnect} accessibilityRole="button"><Text style={styles.disconnect}>Disconnect</Text></Pressable></View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}><Text style={styles.heroEyebrow}>YOUR KIRANI</Text><Text style={styles.heroTitle}>Good food. Clear origins.</Text><Text style={styles.heroBody}>Your monthly groceries, thoughtfully sourced and delivered.</Text></View>
+      {principal?.roles?.includes('delivery_operator') && <View style={styles.card}>
+        <View style={styles.sectionHead}><Text style={styles.sectionTitle}>My delivery route</Text><Button title="Refresh" secondary onPress={() => loadOrders(token)} disabled={refreshing || farmerBusy} /></View>
+        <Text style={styles.body}>Your assigned deliveries are shown here. Starting a delivery and submitting proof requires foreground GPS permission.</Text>
+        {!activeDelivery ? (deliveryAssignments.length === 0 ? <Text style={styles.body}>No active delivery assignments.</Text> : deliveryAssignments.map(item => <View key={item.id} style={styles.orderCard}>
+          <Text style={styles.orderId}>Order {String(item.orderId).slice(0, 8)}</Text><Text style={styles.body}>{item.slotCode} · {item.date} · {item.startsAt}–{item.endsAt}</Text><Text style={styles.caption}>Status: {item.status}</Text>
+          <View style={styles.orderTop}><View style={{ flex: 1 }}><Button title="Open delivery" secondary onPress={() => openDelivery(item.id)} disabled={farmerBusy} /></View>{item.status === 'ASSIGNED' && <View style={{ flex: 1 }}><Button title="Start route" onPress={() => startDelivery(item.id)} disabled={farmerBusy} /></View>}</View>
+        </View>)) : <View style={styles.orderCard}>
+          <View style={styles.sectionHead}><Text style={styles.orderId}>Order {String(activeDelivery.orderId).slice(0, 8)}</Text><Button title="Back" secondary onPress={() => setActiveDelivery(null)} /></View>
+          <Text style={styles.caption}>Record the actual delivered and refused quantities for every order line.</Text>
+          {(activeDelivery.items || []).map(item => <View key={item.orderItemId} style={styles.card}>
+            <Text style={styles.orderId}>{item.productName}</Text><Text style={styles.caption}>Remaining: {item.remaining} {item.unitCode}</Text>
+            <Text style={styles.fieldLabel}>Quantity delivered</Text><TextInput keyboardType="decimal-pad" style={styles.input} value={podDraft.items[item.orderItemId]?.quantityDelivered || '0'} onChangeText={value => setPodDraft(current => ({ ...current, items: { ...current.items, [item.orderItemId]: { ...current.items[item.orderItemId], quantityDelivered: value } } }))} />
+            <Text style={styles.fieldLabel}>Quantity refused</Text><TextInput keyboardType="decimal-pad" style={styles.input} value={podDraft.items[item.orderItemId]?.quantityRefused || '0'} onChangeText={value => setPodDraft(current => ({ ...current, items: { ...current.items, [item.orderItemId]: { ...current.items[item.orderItemId], quantityRefused: value } } }))} />
+            <Text style={styles.fieldLabel}>Short/refusal reason (if applicable)</Text><TextInput style={styles.input} value={podDraft.items[item.orderItemId]?.reason || ''} onChangeText={value => setPodDraft(current => ({ ...current, items: { ...current.items, [item.orderItemId]: { ...current.items[item.orderItemId], reason: value } } }))} />
+          </View>)}
+          <Text style={styles.fieldLabel}>Received by</Text><TextInput style={styles.input} value={podDraft.receivedBy} onChangeText={value => setPodDraft(current => ({ ...current, receivedBy: value }))} />
+          <Text style={styles.fieldLabel}>Delivery notes / overall reason</Text><TextInput style={styles.input} value={podDraft.reason} onChangeText={value => setPodDraft(current => ({ ...current, reason: value }))} />
+          <Text style={styles.fieldLabel}>Cash collected (if any)</Text><TextInput keyboardType="decimal-pad" style={styles.input} value={podDraft.cashCollected} onChangeText={value => setPodDraft(current => ({ ...current, cashCollected: value }))} />
+          <Button title={farmerBusy ? 'Submitting…' : 'Capture GPS & submit POD'} onPress={submitDeliveryPod} disabled={farmerBusy} />
+        </View>}
+      </View>}
       {principal?.roles?.includes('mill_operator') && <View style={styles.card}>
         <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Mill processing jobs</Text><Button title="Refresh" secondary onPress={() => loadOrders(token)} disabled={refreshing || farmerBusy} /></View>
         <Text style={styles.body}>Only jobs assigned to your approved facility are shown. Confirm acceptance and physical material receipt before recording processing stages.</Text>
