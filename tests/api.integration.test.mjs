@@ -454,6 +454,20 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const adminAddressAccess=await call('admin','/customers/me/addresses');
   assert.equal(adminAddressAccess.status,403);
 
+  // Authorization is resolved from current database membership, not stale JWT role claims.
+  await pool.query('DELETE FROM user_roles WHERE user_id=$1 AND role_id=$2',[userIds.admin,roleIds.admin]);
+  const revokedRole=await call('admin','/admin/dashboard');
+  assert.equal(revokedRole.status,403);assert.equal(revokedRole.error.code,'ROLE_NOT_ASSIGNED');
+  await pool.query('INSERT INTO user_roles(user_id,role_id) VALUES($1,$2)',[userIds.admin,roleIds.admin]);
+  const restoredRole=await call('admin','/admin/dashboard');assert.equal(restoredRole.status,200);
+
+  // Account suspension immediately invalidates an otherwise unexpired access token.
+  await pool.query("UPDATE users SET status='suspended' WHERE id=$1 AND tenant_id=$2",[userIds.admin,tenant]);
+  const suspendedAccount=await call('admin','/admin/dashboard');
+  assert.equal(suspendedAccount.status,401);assert.equal(suspendedAccount.error.code,'ACCOUNT_INACTIVE');
+  await pool.query("UPDATE users SET status='active' WHERE id=$1 AND tenant_id=$2",[userIds.admin,tenant]);
+  const reactivatedAccount=await call('admin','/admin/dashboard');assert.equal(reactivatedAccount.status,200);
+
   const forbidden=await call('customer','/admin/dashboard');
   assert.equal(forbidden.status,403);
 });
