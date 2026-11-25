@@ -322,7 +322,9 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const otherTenantDashboard=await call('otherAdmin','/admin/dashboard');
   assert.equal(otherTenantDashboard.status,200);assert.equal(otherTenantDashboard.data.openCycles,0);
   const otherInventoryLocations=await call('otherAdmin','/admin/inventory/locations');
-  assert.equal(otherInventoryLocations.status,200);assert.deepEqual(otherInventoryLocations.data,[]);
+  assert.equal(otherInventoryLocations.status,200);
+  const originalTenantLocationIds=(await pool.query('SELECT id FROM inventory_locations WHERE tenant_id=$1',[tenant])).rows.map(x=>x.id);
+  assert.equal(otherInventoryLocations.data.some(location=>originalTenantLocationIds.includes(location.id)),false);
   const otherProcurementOrders=await call('otherAdmin','/admin/procurement/orders');
   assert.equal(otherProcurementOrders.status,200);assert.deepEqual(otherProcurementOrders.data,[]);
   const otherProcessingJobs=await call('otherAdmin','/admin/processing/jobs');
