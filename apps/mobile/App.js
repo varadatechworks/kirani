@@ -42,6 +42,14 @@ export default function App() {
   const [farmerBusy, setFarmerBusy] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
   const [basket, setBasket] = useState({});
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [addressDraft, setAddressDraft] = useState({ label: 'Home', recipientName: '', phone: '', line1: '', locality: '', city: '', state: 'Karnataka', postalCode: '', isDefault: true });
+  const [activeCycleId, setActiveCycleId] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [orderPreview, setOrderPreview] = useState(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutKey, setCheckoutKey] = useState('');
   const [catalogueBusy, setCatalogueBusy] = useState(false);
   const [principal, setPrincipal] = useState(null);
   const [busy, setBusy] = useState(true);
@@ -133,6 +141,50 @@ export default function App() {
       await apiRequest('/customers/me/recurring-basket', { token, method: 'PUT', body: { cycleId: cycle.id, items } });
       setError(''); setNotice('Your recurring basket has been saved for the next eligible cycle.');
     } catch (e) { setError(e.message); }
+  };
+  const loadCheckout = async () => {
+    setCheckoutBusy(true); setError(''); setNotice('');
+    try {
+      const [savedAddresses, cycle] = await Promise.all([
+        apiRequest('/customers/me/addresses', { token }),
+        apiRequest('/monthly-cycles/current', { token })
+      ]);
+      const list = Array.isArray(savedAddresses) ? savedAddresses : [];
+      setAddresses(list); setSelectedAddressId(current => current || list.find(item => item.isDefault)?.id || list[0]?.id || '');
+      setActiveCycleId(cycle?.id || ''); setOrderPreview(null);
+      if (!cycle?.id) setError('No open monthly cycle is currently available for ordering.');
+    } catch (e) { setError(e.message); }
+    finally { setCheckoutBusy(false); }
+  };
+  const saveAddress = async () => {
+    setCheckoutBusy(true); setError(''); setNotice('');
+    try {
+      const saved = await apiRequest('/customers/me/addresses', { token, method: 'POST', body: addressDraft });
+      const list = await apiRequest('/customers/me/addresses', { token });
+      setAddresses(Array.isArray(list) ? list : []); setSelectedAddressId(saved.id); setNotice('Delivery address saved securely.');
+    } catch (e) { setError(e.message); }
+    finally { setCheckoutBusy(false); }
+  };
+  const previewOrder = async () => {
+    setCheckoutBusy(true); setError(''); setNotice('');
+    try {
+      if (!activeCycleId || !selectedAddressId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(deliveryDate)) throw new Error('Choose an available delivery address and enter a valid delivery date (YYYY-MM-DD).');
+      const preview = await apiRequest('/customers/me/orders/preview', { token, method: 'POST', body: { cycleId: activeCycleId, addressId: selectedAddressId, deliveryDate } });
+      setOrderPreview(preview); setCheckoutKey(current => current || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+    } catch (e) { setError(e.message); }
+    finally { setCheckoutBusy(false); }
+  };
+  const placeOrder = async () => {
+    if (!orderPreview || !activeCycleId || !selectedAddressId) return;
+    setCheckoutBusy(true); setError(''); setNotice('');
+    const key = checkoutKey || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    setCheckoutKey(key);
+    try {
+      const created = await apiRequest('/customers/me/orders', { token, method: 'POST', headers: { 'Idempotency-Key': key }, body: { cycleId: activeCycleId, addressId: selectedAddressId, deliveryDate } });
+      setOrderPreview(null); setCheckoutKey(''); setNotice('Order ' + String(created.id).slice(0, 8) + ' placed. Payment status: ' + created.paymentStatus + '.');
+      await loadOrders(token);
+    } catch (e) { setError(e.message + ' Your idempotency key has been retained so a retry will not create a duplicate order.'); }
+    finally { setCheckoutBusy(false); }
   };
   const saveFarmerProfile = async () => {
     setFarmerBusy(true); setError(''); setNotice('');
@@ -338,6 +390,27 @@ export default function App() {
           <Pressable accessibilityRole="button" accessibilityLabel={'Add one '+product.name} onPress={() => changeQuantity(product,1)} style={styles.quantityButton}><Text style={styles.quantityText}>＋</Text></Pressable>
         </View>)}
         {catalogue.length > 0 && <Button title={'Save recurring basket ('+Object.keys(basket).length+' products)'} onPress={saveRecurringBasket} />}
+      </View>}
+      {principal?.roles?.includes('customer') && <View style={styles.card}>
+        <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Review & place order</Text><Button title={checkoutBusy ? 'Loading…' : 'Load checkout'} secondary onPress={loadCheckout} disabled={checkoutBusy} /></View>
+        <Text style={styles.body}>Select a saved delivery address and date. Kirani recalculates prices on the server before placement.</Text>
+        {addresses.map(address => <Pressable key={address.id} accessibilityRole="radio" accessibilityState={{ checked: selectedAddressId === address.id }} onPress={() => { setSelectedAddressId(address.id); setOrderPreview(null); }} style={[styles.orderCard, selectedAddressId === address.id && { borderColor: colors.forest, borderWidth: 2 }]}>
+          <Text style={styles.orderId}>{address.label} {address.isDefault ? '· Default' : ''}</Text><Text style={styles.caption}>{address.recipientName} · {address.phone}</Text><Text style={styles.caption}>{address.line1}, {address.locality}, {address.city} - {address.postalCode}</Text>
+        </Pressable>)}
+        <Text style={styles.fieldLabel}>Add a delivery address</Text>
+        {Object.entries({ label: 'Address label', recipientName: 'Recipient name', phone: 'Phone number', line1: 'House / street / address', locality: 'Locality', city: 'City', state: 'State', postalCode: '6-digit PIN code' }).map(([key,label]) => <View key={key}><Text style={styles.fieldLabel}>{label}</Text><TextInput style={styles.input} value={addressDraft[key]} onChangeText={value => setAddressDraft(current => ({ ...current, [key]: value }))} keyboardType={key === 'phone' || key === 'postalCode' ? 'phone-pad' : 'default'} maxLength={key === 'postalCode' ? 6 : 200} /></View>)}
+        <Button title={checkoutBusy ? 'Saving…' : 'Save delivery address'} secondary onPress={saveAddress} disabled={checkoutBusy} />
+        <Text style={styles.fieldLabel}>Delivery date (YYYY-MM-DD)</Text><TextInput style={styles.input} placeholder="2026-12-01" value={deliveryDate} onChangeText={value => { setDeliveryDate(value); setOrderPreview(null); }} />
+        {!!activeCycleId && <Text style={styles.caption}>Open cycle: {activeCycleId.slice(0, 8)}</Text>}
+        <Button title={checkoutBusy ? 'Calculating…' : 'Preview order total'} onPress={previewOrder} disabled={checkoutBusy || !selectedAddressId} />
+        {!!orderPreview && <View style={styles.message}>
+          <Text style={styles.messageText}>Server-calculated preview · {orderPreview.items?.length || 0} items</Text>
+          {(orderPreview.items || []).map(item => <Text key={item.productId} style={styles.caption}>{item.name} · {item.quantity} {item.unitCode} · {money(item.lineTotalMinor, orderPreview.currency)}</Text>)}
+          <Text style={styles.orderId}>Total: {money(orderPreview.totalMinor, orderPreview.currency)}</Text>
+          {!!orderPreview.taxNote && <Text style={styles.caption}>{orderPreview.taxNote}</Text>}
+          <Button title={checkoutBusy ? 'Placing…' : 'Confirm & place order'} onPress={placeOrder} disabled={checkoutBusy} />
+          <Text style={styles.caption}>Payment gateway checkout is not yet connected; this placement creates an order with payment pending.</Text>
+        </View>}
       </View>}
       <View style={styles.card}>
         <Text style={styles.eyebrow}>ACCOUNT</Text><Text style={styles.heading}>Welcome back</Text>
