@@ -216,6 +216,7 @@ export default function App() {
       await apiRequest('/mill/processing/jobs/' + id + '/' + action, { token, method: 'POST', body: {} });
       const jobs = await apiRequest('/mill/processing/jobs', { token });
       setProcessingJobs(Array.isArray(jobs) ? jobs : []);
+      if (action === 'complete') setActiveProcessingJob(null);
       setNotice(action === 'accept' ? 'Processing job accepted.' : action === 'receive' ? 'Physical material receipt confirmed.' : 'Processing outputs dispatched to Kirani for inspection.');
     } catch (e) { setError(e.message); }
     finally { setFarmerBusy(false); }
