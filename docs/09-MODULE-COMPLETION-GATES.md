@@ -182,6 +182,9 @@ Automated Razorpay refund submission, bank payout integration, email/SMS/WhatsAp
 
 ## Security hardening update
 
+- Authentication now reloads the user's current tenant-scoped role memberships from PostgreSQL on every request; stale JWT role claims cannot preserve access after a role is removed.
+- Inactive/deactivated/suspended user accounts are rejected, and the authentication query now also checks the owning tenant status. A suspended tenant blocks all its users even if their individual accounts and signed access tokens remain active.
+- PostgreSQL integration tests cover role revocation/restoration, user suspension/reactivation, tenant suspension/reactivation, and cross-tenant resource isolation. The latest tenant-status code and regression-test commits are awaiting their branch CI runs.
 - Added a bounded per-client API rate limiter with configurable `API_RATE_LIMIT_PER_MINUTE` and `API_RATE_WINDOW_MS`; trusted forwarded-IP parsing is opt-in via `TRUST_PROXY=true`.
 - Added frame, content-type, referrer and cross-origin resource policy headers plus HSTS when TLS is direct or a trusted proxy reports HTTPS.
 - Kept same-origin camera/GPS permissions available for operator workflows.
