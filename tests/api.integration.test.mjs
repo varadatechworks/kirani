@@ -53,6 +53,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   tokens.otherMill=tokenForOther(otherMillUser,'mill_operator');
   tokens.otherDelivery=tokenForOther(otherDeliveryUser,'delivery_operator');
   tokens.revokedAdmin=token('admin');
+  tokens.revokeAdmin=token('admin');
   for(const value of Object.values(tokens)){
     const claims=JSON.parse(Buffer.from(value.split('.')[1],'base64url').toString('utf8'));
     await pool.query('INSERT INTO user_sessions(id,tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4,to_timestamp($5))',[claims.sid,claims.tenant_id,claims.sub,createHash('sha256').update(value).digest('hex'),claims.exp]);
@@ -86,6 +87,10 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(malformedJson.status,400);assert.equal(malformedJson.error.code,'INVALID_JSON');
   const arrayBody=await call('customer','/customers/me/addresses',{method:'POST',headers:{'content-type':'application/json'},body:'[]'});
   assert.equal(arrayBody.status,400);assert.equal(arrayBody.error.code,'INVALID_JSON');
+  const revokeCurrent=await call('revokeAdmin','/session/revoke',{method:'POST'});
+  assert.equal(revokeCurrent.status,200);assert.equal(revokeCurrent.data.revoked,true);
+  const afterRevoke=await call('revokeAdmin','/session/me');
+  assert.equal(afterRevoke.status,401);assert.equal(afterRevoke.error.code,'SESSION_REVOKED');
   const revokedSession=await call('revokedAdmin','/session/me');
   assert.equal(revokedSession.status,401);assert.equal(revokedSession.error.code,'SESSION_REVOKED');
   const me=await call('admin','/session/me');
