@@ -170,6 +170,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const farmerApproval=await call('admin','/admin/farmer-profiles/'+userIds.farmer+'/decision',{method:'POST',body:JSON.stringify({decision:'approve',reason:'CI identity and farm verification'})});
   assert.equal(farmerApproval.status,200);assert.equal(farmerApproval.data.verificationStatus,'APPROVED');
   const expectedDeliveryDate=(await pool.query('SELECT (current_date+2)::text AS d')).rows[0].d;
+  const invalidPoDate=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-DATE-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:1,unitPriceMinor:7000,expectedDeliveryDate:'2099-02-30'})});
+  assert.equal(invalidPoDate.status,422);assert.equal(invalidPoDate.error.code,'PROCUREMENT_ORDER_VALIDATION');
   const po=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CI-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:10,unitPriceMinor:7000,expectedDeliveryDate})});
   assert.equal(po.status,200);assert.equal(po.data.status,'ISSUED');assert.equal(po.data.items.length,1);
   const farmerPos=await call('farmer','/farmers/me/procurement-orders');
