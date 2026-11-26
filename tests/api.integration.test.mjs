@@ -2,7 +2,7 @@ import { runInventoryExpirySweep } from '../src/workers/maintenance.mjs';
 import { runNotificationEmailSweep } from '../src/workers/notifications.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { once } from 'node:events';
@@ -52,6 +52,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const tokenForOther=(userId,role)=>{const h=otherEnc({alg:'HS256',typ:'JWT'}),p=otherEnc({sub:userId,tenant_id:otherTenant,iss:issuer,aud:audience,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600,sid:randomUUID(),roles:[role]}),u=h+'.'+p;return u+'.'+createHmac('sha256',secret).update(u).digest('base64url');};
   tokens.otherMill=tokenForOther(otherMillUser,'mill_operator');
   tokens.otherDelivery=tokenForOther(otherDeliveryUser,'delivery_operator');
+  tokens.revokedAdmin=token('admin');
+  for(const value of Object.values(tokens)){
+    const claims=JSON.parse(Buffer.from(value.split('.')[1],'base64url').toString('utf8'));
+    await pool.query('INSERT INTO user_sessions(id,tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4,to_timestamp($5))',[claims.sid,claims.tenant_id,claims.sub,createHash('sha256').update(value).digest('hex'),claims.exp]);
+  }
+  const revokedClaims=JSON.parse(Buffer.from(tokens.revokedAdmin.split('.')[1],'base64url').toString('utf8'));
+  await pool.query('UPDATE user_sessions SET revoked_at=now() WHERE id=$1',[revokedClaims.sid]);
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
@@ -79,6 +86,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(malformedJson.status,400);assert.equal(malformedJson.error.code,'INVALID_JSON');
   const arrayBody=await call('customer','/customers/me/addresses',{method:'POST',headers:{'content-type':'application/json'},body:'[]'});
   assert.equal(arrayBody.status,400);assert.equal(arrayBody.error.code,'INVALID_JSON');
+  const revokedSession=await call('revokedAdmin','/session/me');
+  assert.equal(revokedSession.status,401);assert.equal(revokedSession.error.code,'SESSION_REVOKED');
   const me=await call('admin','/session/me');
   assert.equal(me.status,200);assert.equal(me.data.roles[0],'admin');
   const dashboard=await call('admin','/admin/dashboard');
