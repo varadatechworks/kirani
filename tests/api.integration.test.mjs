@@ -444,6 +444,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const remainingRefundBalance=await pool.query("SELECT (COALESCE((SELECT sum(amount_minor) FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE'),0)-COALESCE((SELECT sum(amount_minor) FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='REFUND'),0))::text AS n",[tenant,secondOrder.data.id]);
   const excessiveRefundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:(BigInt(remainingRefundBalance.rows[0].n)+1n).toString(),reason:'Attempt to refund more than remaining captured balance'})});
   assert.equal(excessiveRefundRequest.status,409);assert.equal(excessiveRefundRequest.error.code,'REFUND_EXCEEDS_CAPTURED');
+  const paidOrderCancellation=await call('customer','/orders/'+secondOrder.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Customer cancelled paid order before packing'})});
+  assert.equal(paidOrderCancellation.status,200);assert.equal(paidOrderCancellation.data.fulfilmentStatus,'CANCELLED');assert.ok(paidOrderCancellation.data.refundRequests.length>=1);assert.ok(paidOrderCancellation.data.refundRequests.every(x=>x.status==='REQUESTED'));
   const refundHistory=await call('customer','/customers/me/refund-requests');
   assert.ok(refundHistory.data.some(x=>x.id===refundRequest.data.id&&x.status==='PROCESSED'));
   const accountId=(await pool.query('SELECT id FROM loyalty_accounts WHERE tenant_id=$1 AND customer_id=$2',[tenant,userIds.customer])).rows[0].id;
