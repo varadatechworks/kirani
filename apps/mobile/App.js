@@ -284,8 +284,19 @@ export default function App() {
     finally { setFarmerBusy(false); }
   };
   const disconnect = async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    setToken(null); setPrincipal(null); setOrders([]); setDashboard(null); setError('');
+    const activeToken = token;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      if (activeToken) await apiRequest('/session/revoke', { token: activeToken, method: 'POST' });
+    } catch (e) {
+      // Always clear local credentials; a failed network revoke must not trap the user in the app.
+      setNotice('Signed out on this device. The server session could not be confirmed as revoked; it will expire automatically.');
+    } finally {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      setToken(null); setPrincipal(null); setOrders([]); setDashboard(null);
+      setFarmerProfile(null); setFarmerOrders([]); setProcessingJobs([]); setDeliveryAssignments([]);
+      setActiveDelivery(null); setActiveProcessingJob(null); setBusy(false);
+    }
   };
 
   if (busy) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={colors.forest} /><Text style={styles.muted}>Preparing Kirani…</Text></SafeAreaView>;
