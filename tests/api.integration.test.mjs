@@ -62,7 +62,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const revokedClaims=JSON.parse(Buffer.from(tokens.revokedAdmin.split('.')[1],'base64url').toString('utf8'));
   await pool.query('UPDATE user_sessions SET revoked_at=now() WHERE id=$1',[revokedClaims.sid]);
   const expiredClaims=JSON.parse(Buffer.from(tokens.expiredAdmin.split('.')[1],'base64url').toString('utf8'));
-  await pool.query('UPDATE user_sessions SET expires_at=now()-interval '1 second' WHERE id=$1',[expiredClaims.sid]);
+  await pool.query("UPDATE user_sessions SET expires_at=now()-interval '1 second' WHERE id=$1",[expiredClaims.sid]);
   const base='http://127.0.0.1:'+port;
   let ready=false;
   for(let i=0;i<100;i++){try{const response=await fetch(base+'/health/ready');if(response.ok){ready=true;break}}catch{}await delay(100)}
