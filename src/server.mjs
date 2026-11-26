@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,14 +53,18 @@ const authenticate=async req=>{
   let claims;
   try{claims=verifyAccessToken(token,{secret:process.env.AUTH_JWT_SECRET,issuer:process.env.AUTH_ISSUER,audience:process.env.AUTH_AUDIENCE});}
   catch{fail(401,'AUTH_INVALID','Your sign-in token is invalid or expired.');}
+  if(!claims.sessionId)fail(401,'SESSION_REQUIRED','Your sign-in session is missing. Please sign in again.');
   const db=requireDb();
+  const tokenHash=createHash('sha256').update(token).digest('hex');
   const result=await db.query(`SELECT u.id,u.tenant_id,u.display_name,u.email,u.phone,u.status,u.locale,t.status AS tenant_status,
+    EXISTS(SELECT 1 FROM user_sessions s WHERE s.id=$3 AND s.user_id=u.id AND s.tenant_id=u.tenant_id AND s.token_hash=$4 AND s.revoked_at IS NULL AND s.expires_at>now()) AS session_active,
     COALESCE(array_agg(DISTINCT r.code) FILTER(WHERE r.code IS NOT NULL),'{}') AS roles
     FROM users u JOIN tenants t ON t.id=u.tenant_id
     LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id AND r.tenant_id=u.tenant_id
-    WHERE u.id=$1 AND u.tenant_id=$2 GROUP BY u.id,t.status`,[claims.userId,claims.tenantId]);
+    WHERE u.id=$1 AND u.tenant_id=$2 GROUP BY u.id,t.status`,[claims.userId,claims.tenantId,claims.sessionId,tokenHash]);
   if(!result.rowCount||result.rows[0].status!=='active')fail(401,'ACCOUNT_INACTIVE','This account is not active. Contact Kirani support.');
   if(result.rows[0].tenant_status!=='active')fail(403,'TENANT_INACTIVE','This Kirani workspace is not active. Contact your workspace administrator.');
+  if(!result.rows[0].session_active)fail(401,'SESSION_REVOKED','Your sign-in session has expired or was revoked. Please sign in again.');
   const user=result.rows[0];
   if(!user.roles.length)fail(403,'ROLE_NOT_ASSIGNED','Your account has no active workspace role.');
   return {userId:user.id,tenantId:user.tenant_id,displayName:user.display_name,email:user.email,phone:user.phone,locale:user.locale,roles:user.roles,sessionId:claims.sessionId};
