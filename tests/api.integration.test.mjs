@@ -297,6 +297,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(policyUpdate.status,200);assert.equal(policyUpdate.data.policy,'FIFO');
   const policyRestore=await call('admin','/admin/inventory/products/'+product.data.id+'/policy',{method:'PUT',body:JSON.stringify({policy:'FEFO'})});
   assert.equal(policyRestore.status,200);
+  const invalidInventoryExpiry=await call('admin','/admin/inventory/lots/'+sourceForMill.id+'/expiry',{method:'POST',body:JSON.stringify({expiresOn:'2099-02-30',bestBefore:null})});
+  assert.equal(invalidInventoryExpiry.status,422);assert.equal(invalidInventoryExpiry.error.code,'INVENTORY_EXPIRY_INVALID');
   const expiryEdit=await call('admin','/admin/inventory/lots/'+sourceForMill.id+'/expiry',{method:'POST',body:JSON.stringify({expiresOn:'2099-12-31',bestBefore:'2099-06-30'})});
   assert.equal(expiryEdit.status,200);assert.equal(String(expiryEdit.data.expiresOn).slice(0,10),'2099-12-31');
   const ledger=await call('admin','/admin/inventory/ledger?limit=100');
