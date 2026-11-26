@@ -432,7 +432,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(badGateway.status,401);
   const refundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:100,reason:'Customer requested a partial refund for test'})});
   assert.equal(refundRequest.status,200);assert.equal(refundRequest.data.status,'REQUESTED');
-  const capturedForRefund=await pool.query('SELECT pt.amount_minor::text AS n FROM refund_requests rr JOIN payment_transactions pt ON pt.id=rr.payment_transaction_id WHERE rr.id=$1',[refundRequest.data.id]);
+  const capturedForRefund=await pool.query("SELECT COALESCE(sum(pt.amount_minor),0)::text AS n FROM payment_transactions pt WHERE pt.tenant_id=$1 AND pt.order_id=$2",[tenant,secondOrder.data.id]);
   const overReservedRefund=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:capturedForRefund.rows[0].n,reason:'Pending refund requests must reserve captured balance'})});
   assert.equal(overReservedRefund.status,409);assert.equal(overReservedRefund.error.code,'REFUND_EXCEEDS_CAPTURED');
   const refundDecision=await call('admin','/admin/refunds/'+refundRequest.data.id+'/decision',{method:'POST',body:JSON.stringify({decision:'APPROVE',reason:'Refund evidence verified'})});
