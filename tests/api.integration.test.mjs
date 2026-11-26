@@ -436,6 +436,10 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(refundDecision.status,200);assert.equal(refundDecision.data.status,'APPROVED');
   const refundProcessed=await call('admin','/admin/refunds/'+refundRequest.data.id+'/record-processed',{method:'POST',body:JSON.stringify({externalReference:'REFUND-CI-'+randomUUID(),reason:'Refund externally completed and reconciled'})});
   assert.equal(refundProcessed.status,200);assert.equal(refundProcessed.data.status,'PROCESSED');assert.equal(refundProcessed.data.paymentStatus,'PARTIALLY_REFUNDED');
+  const duplicateRefundProcess=await call('admin','/admin/refunds/'+refundRequest.data.id+'/record-processed',{method:'POST',body:JSON.stringify({externalReference:'REFUND-DUP-'+randomUUID(),reason:'Duplicate processing must be rejected'})});
+  assert.equal(duplicateRefundProcess.status,409);assert.equal(duplicateRefundProcess.error.code,'REFUND_NOT_APPROVED');
+  const excessiveRefundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:9901,reason:'Attempt to refund more than remaining captured balance'})});
+  assert.equal(excessiveRefundRequest.status,409);assert.equal(excessiveRefundRequest.error.code,'REFUND_EXCEEDS_CAPTURED');
   const refundHistory=await call('customer','/customers/me/refund-requests');
   assert.ok(refundHistory.data.some(x=>x.id===refundRequest.data.id&&x.status==='PROCESSED'));
   const accountId=(await pool.query('SELECT id FROM loyalty_accounts WHERE tenant_id=$1 AND customer_id=$2',[tenant,userIds.customer])).rows[0].id;
