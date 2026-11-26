@@ -441,7 +441,8 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(refundProcessed.status,200);assert.equal(refundProcessed.data.status,'PROCESSED');assert.equal(refundProcessed.data.paymentStatus,'PARTIALLY_REFUNDED');
   const duplicateRefundProcess=await call('admin','/admin/refunds/'+refundRequest.data.id+'/record-processed',{method:'POST',body:JSON.stringify({externalReference:'REFUND-DUP-'+randomUUID(),reason:'Duplicate processing must be rejected'})});
   assert.equal(duplicateRefundProcess.status,409);assert.equal(duplicateRefundProcess.error.code,'REFUND_NOT_APPROVED');
-  const excessiveRefundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:9901,reason:'Attempt to refund more than remaining captured balance'})});
+  const remainingRefundBalance=await pool.query("SELECT (COALESCE((SELECT sum(amount_minor) FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='CAPTURE'),0)-COALESCE((SELECT sum(amount_minor) FROM payment_ledger WHERE tenant_id=$1 AND order_id=$2 AND entry_type='REFUND'),0))::text AS n",[tenant,secondOrder.data.id]);
+  const excessiveRefundRequest=await call('customer','/customers/me/refund-requests',{method:'POST',body:JSON.stringify({orderId:secondOrder.data.id,amountMinor:(BigInt(remainingRefundBalance.rows[0].n)+1n).toString(),reason:'Attempt to refund more than remaining captured balance'})});
   assert.equal(excessiveRefundRequest.status,409);assert.equal(excessiveRefundRequest.error.code,'REFUND_EXCEEDS_CAPTURED');
   const refundHistory=await call('customer','/customers/me/refund-requests');
   assert.ok(refundHistory.data.some(x=>x.id===refundRequest.data.id&&x.status==='PROCESSED'));
