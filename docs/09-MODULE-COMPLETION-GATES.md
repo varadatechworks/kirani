@@ -82,7 +82,7 @@ Updated after inventory, processing, traceability, delivery, loyalty, engagement
 
 | Module | Backend | Frontend | Integration | Remaining development gates |
 |---|---:|---:|---:|---|
-| Identity, tenant and RBAC | 80% | 65% | 70% | External identity provider, MFA/recovery, full role matrix, tenant IDOR suite, session revocation |
+| Identity, tenant and RBAC | 85% | 65% | 78% | Production identity provider, sign-in/OTP/MFA and recovery lifecycle, full role matrix and exhaustive tenant IDOR suite; persisted session validation and current-session revocation are implemented and PostgreSQL integration-tested |
 | Customer addresses | 95% | 90% | 92% | Pincode/service-area validation and browser E2E |
 | Catalogue and pricing | 80% | 75% | 78% | Effective-dated price/tax, packs/variants and full search/filter UX |
 | Monthly cycles and recurring basket | 80% | 75% | 78% | One-time basket, cycle timezone/cutoff edge cases, substitutions and version UX |
@@ -213,3 +213,15 @@ Verification:
 [Kirani CI run 45011814692](https://github.com/varadatechworks/kirani/actions/runs/45011814692) completed successfully on the feature branch. PostgreSQL migrations and `npm run check` passed. Coverage includes customer order/checkout, demand planning, procurement and GRN, inventory reservation expiry/ledger/recall, mill processing, package trace and QR label generation, delivery/POD, signed Razorpay webhook replay and duplicate-capture handling, refund reconciliation, farmer settlement maker-checker, loyalty expiry/referrals, notifications/support/reports, cross-tenant access and rate-limiter behavior.
 
 This is automated development verification only. No browser UAT, live gateway/bank/provider transaction, production deployment or mobile store build has been completed.
+
+
+## Persisted authentication session update
+
+Implemented on `feat/phase-1-foundation`:
+- JWTs must include a session ID and match a persisted `user_sessions` row bound to the same tenant, user and SHA-256 token hash.
+- Expired or revoked database sessions are rejected even when the signed access token itself remains within its JWT expiry.
+- `POST /api/v1/session/revoke` revokes only the authenticated session and writes an audit event.
+- Mobile sign-out attempts server-side revocation and always clears local secure credentials, with a clear warning if the server cannot confirm revocation.
+- PostgreSQL integration tests cover current-session revocation and expiry of a persisted session; backend and Expo Android/iOS bundle CI passed for commit `7179a31` (runs `45886732312` and `45886732326`).
+
+Production sign-in, OTP/MFA, account recovery, refresh-token rotation and provider onboarding remain release blockers. These session changes do not constitute a complete production identity system.
