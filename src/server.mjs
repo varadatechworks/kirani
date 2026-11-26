@@ -95,6 +95,15 @@ async function route(req,res,cid){
   const auth=await authenticate(req);const db=requireDb();
 
   if(method==='GET'&&path==='/api/v1/session/me')return send(res,{id:auth.userId,tenantId:auth.tenantId,displayName:auth.displayName,email:auth.email,phone:auth.phone,locale:auth.locale,roles:auth.roles},cid);
+  if(method==='POST'&&path==='/api/v1/session/revoke'){
+    const revoked=await transaction(async c=>{
+      const result=await c.query('UPDATE user_sessions SET revoked_at=now() WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND revoked_at IS NULL RETURNING id',[auth.sessionId,auth.tenantId,auth.userId]);
+      if(!result.rowCount)fail(409,'SESSION_ALREADY_REVOKED','This session has already been revoked.');
+      await audit(c,auth,cid,'session.revoked','user_session',auth.sessionId);
+      return result.rows[0];
+    });
+    return send(res,{revoked:true,sessionId:revoked.id},cid);
+  }
 
   if(method==='GET'&&path==='/api/v1/admin/dashboard'){
     requireRole(auth,'admin');
