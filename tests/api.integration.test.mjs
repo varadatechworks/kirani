@@ -172,6 +172,13 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const expectedDeliveryDate=(await pool.query('SELECT (current_date+2)::text AS d')).rows[0].d;
   const invalidPoDate=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-DATE-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:1,unitPriceMinor:7000,expectedDeliveryDate:'2099-02-30'})});
   assert.equal(invalidPoDate.status,422);assert.equal(invalidPoDate.error.code,'PROCUREMENT_ORDER_VALIDATION');
+  const allocationBeforeCancel=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
+  const cancelPo=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CANCEL-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:2,unitPriceMinor:7000,expectedDeliveryDate})});
+  assert.equal(cancelPo.status,200);assert.equal(cancelPo.data.status,'ISSUED');
+  const cancelledPo=await call('admin','/admin/procurement/orders/'+cancelPo.data.id+'/cancel',{method:'POST',body:JSON.stringify({reason:'Supplier harvest schedule changed'})});
+  assert.equal(cancelledPo.status,200);assert.equal(cancelledPo.data.status,'CANCELLED');assert.equal(cancelledPo.data.responseNote,'Supplier harvest schedule changed');
+  const allocationAfterCancel=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
+  assert.equal(allocationAfterCancel,allocationBeforeCancel);
   const po=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CI-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:10,unitPriceMinor:7000,expectedDeliveryDate})});
   assert.equal(po.status,200);assert.equal(po.data.status,'ISSUED');assert.equal(po.data.items.length,1);
   const farmerPos=await call('farmer','/farmers/me/procurement-orders');
