@@ -36,6 +36,21 @@ export async function handleFarmerProcurementRoutes(ctx){
    return {...po.rows[0],items:[{id:item.rows[0].id,productId:item.rows[0].product_id,quantityOrdered:String(item.rows[0].quantity_ordered),unitCode:item.rows[0].unit_code,unitPriceMinor:String(item.rows[0].unit_price_minor),lineTotalMinor:String(item.rows[0].line_total_minor)}]};
   });return send(res,poShape(r),cid),true;
  }
+ const poReschedule=path.match(/^\/api\/v1\/admin\/procurement\/orders\/([0-9a-f-]+)\/delivery-date$/i);
+ if(method==='POST'&&poReschedule){
+  requireRole(auth,'admin');if(!uuid.test(poReschedule[1]))fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
+  const b=await bodyJson(req);if(!validDate(b.expectedDeliveryDate))fail(422,'PROCUREMENT_DELIVERY_DATE_INVALID','Provide a real delivery date in YYYY-MM-DD format.');
+  const r=await transaction(async c=>{
+   const q=await c.query('SELECT * FROM procurement_orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[poReschedule[1],auth.tenantId]);
+   if(!q.rowCount)fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
+   if(!['ISSUED','ACCEPTED'].includes(q.rows[0].status))fail(409,'PROCUREMENT_ORDER_STATE_CONFLICT','Only issued or accepted purchase orders without receipts can be rescheduled.');
+   const receipts=await c.query('SELECT 1 FROM procurement_receipts WHERE procurement_order_id=$1 AND tenant_id=$2 LIMIT 1',[poReschedule[1],auth.tenantId]);
+   if(receipts.rowCount)fail(409,'PROCUREMENT_ORDER_HAS_RECEIPTS','Delivery date cannot be changed after goods receipt has started.');
+   const u=await c.query('UPDATE procurement_orders SET expected_delivery_date=$1,updated_at=now() WHERE id=$2 AND tenant_id=$3 RETURNING *,expected_delivery_date::text AS expected_delivery_date',[b.expectedDeliveryDate,poReschedule[1],auth.tenantId]);
+   await audit(c,auth,cid,'procurement_order.delivery_date_changed','procurement_order',poReschedule[1],{previousDate:q.rows[0].expected_delivery_date,expectedDeliveryDate:b.expectedDeliveryDate});
+   return u.rows[0];
+  });return send(res,poShape(r),cid),true;
+ }
  const poCancel=path.match(/^\/api\/v1\/admin\/procurement\/orders\/([0-9a-f-]+)\/cancel$/i);
  if(method==='POST'&&poCancel){
   requireRole(auth,'admin');if(!uuid.test(poCancel[1]))fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
