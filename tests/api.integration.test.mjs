@@ -182,7 +182,7 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   const po=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CI-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:10,unitPriceMinor:7000,expectedDeliveryDate})});
   assert.equal(po.status,200);assert.equal(po.data.status,'ISSUED');assert.equal(po.data.items.length,1);
   const farmerPos=await call('farmer','/farmers/me/procurement-orders');
-  assert.equal(farmerPos.status,200);assert.equal(farmerPos.data.length,1);
+  assert.equal(farmerPos.status,200);assert.equal(farmerPos.data.length,2);assert.ok(farmerPos.data.some(x=>x.id===cancelPo.data.id&&x.status==='CANCELLED'));
   const poResponse=await call('farmer','/farmers/me/procurement-orders/'+po.data.id+'/response',{method:'POST',body:JSON.stringify({decision:'accept',acceptedQuantity:8,reason:'Accepting available harvest quantity'})});
   assert.equal(poResponse.status,200);assert.equal(poResponse.data.status,'ACCEPTED');
   const allocated=(await pool.query('SELECT allocated_quantity::text AS q FROM farmer_listings WHERE id=$1',[listing.data.id])).rows[0].q;
