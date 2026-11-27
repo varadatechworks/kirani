@@ -36,6 +36,21 @@ export async function handleFarmerProcurementRoutes(ctx){
    return {...po.rows[0],items:[{id:item.rows[0].id,productId:item.rows[0].product_id,quantityOrdered:String(item.rows[0].quantity_ordered),unitCode:item.rows[0].unit_code,unitPriceMinor:String(item.rows[0].unit_price_minor),lineTotalMinor:String(item.rows[0].line_total_minor)}]};
   });return send(res,poShape(r),cid),true;
  }
+ const poCancel=path.match(/^\/api\/v1\/admin\/procurement\/orders\/([0-9a-f-]+)\/cancel$/i);
+ if(method==='POST'&&poCancel){
+  requireRole(auth,'admin');if(!uuid.test(poCancel[1]))fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
+  const b=await bodyJson(req);if(typeof b.reason!=='string'||b.reason.trim().length<3||b.reason.trim().length>500)fail(422,'PROCUREMENT_CANCELLATION_REASON_REQUIRED','Provide a cancellation reason between 3 and 500 characters.');
+  const r=await transaction(async c=>{
+   const q=await c.query('SELECT * FROM procurement_orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[poCancel[1],auth.tenantId]);
+   if(!q.rowCount)fail(404,'PROCUREMENT_ORDER_NOT_FOUND','Purchase order was not found.');
+   if(!['ISSUED','ACCEPTED'].includes(q.rows[0].status))fail(409,'PROCUREMENT_ORDER_STATE_CONFLICT','Only issued or accepted purchase orders with no goods receipts can be cancelled.');
+   const items=await c.query('SELECT listing_id,COALESCE(quantity_accepted,quantity_ordered) AS allocation_to_release FROM procurement_order_items WHERE procurement_order_id=$1 AND tenant_id=$2',[poCancel[1],auth.tenantId]);
+   for(const item of items.rows)await c.query('UPDATE farmer_listings SET allocated_quantity=GREATEST(0,allocated_quantity-$1) WHERE id=$2 AND tenant_id=$3',[item.allocation_to_release,item.listing_id,auth.tenantId]);
+   const u=await c.query("UPDATE procurement_orders SET status='CANCELLED',response_note=$1,updated_at=now() WHERE id=$2 AND tenant_id=$3 RETURNING *,expected_delivery_date::text AS expected_delivery_date",[b.reason.trim(),poCancel[1],auth.tenantId]);
+   await audit(c,auth,cid,'procurement_order.cancelled','procurement_order',poCancel[1],{reason:b.reason.trim(),releasedListingAllocations:items.rowCount});
+   return u.rows[0];
+  });return send(res,poShape(r),cid),true;
+ }
  if(method==='GET'&&path==='/api/v1/admin/procurement/demand-plan'){
   requireRole(auth,'admin');
   const deliveryDate=new URL(req.url,'http://kirani.local').searchParams.get('deliveryDate')||'';
