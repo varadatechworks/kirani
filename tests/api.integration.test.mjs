@@ -181,6 +181,11 @@ test('PostgreSQL-backed admin, farmer and customer API workflow', {skip:!databas
   assert.equal(allocationAfterCancel,allocationBeforeCancel);
   const po=await call('admin','/admin/procurement/orders',{method:'POST',body:JSON.stringify({poNumber:'PO-CI-'+randomUUID(),farmerId:userIds.farmer,listingId:listing.data.id,quantity:10,unitPriceMinor:7000,expectedDeliveryDate})});
   assert.equal(po.status,200);assert.equal(po.data.status,'ISSUED');assert.equal(po.data.items.length,1);
+  const revisedDeliveryDate=new Date(expectedDeliveryDate+'T00:00:00Z');revisedDeliveryDate.setUTCDate(revisedDeliveryDate.getUTCDate()+1);const revisedDate=revisedDeliveryDate.toISOString().slice(0,10);
+  const invalidReschedule=await call('admin','/admin/procurement/orders/'+po.data.id+'/delivery-date',{method:'POST',body:JSON.stringify({expectedDeliveryDate:'2099-02-30'})});
+  assert.equal(invalidReschedule.status,422);assert.equal(invalidReschedule.error.code,'PROCUREMENT_DELIVERY_DATE_INVALID');
+  const rescheduledPo=await call('admin','/admin/procurement/orders/'+po.data.id+'/delivery-date',{method:'POST',body:JSON.stringify({expectedDeliveryDate:revisedDate})});
+  assert.equal(rescheduledPo.status,200);assert.equal(rescheduledPo.data.expectedDeliveryDate,revisedDate);
   const farmerPos=await call('farmer','/farmers/me/procurement-orders');
   assert.equal(farmerPos.status,200);assert.equal(farmerPos.data.length,2);assert.ok(farmerPos.data.some(x=>x.id===cancelPo.data.id&&x.status==='CANCELLED'));
   const poResponse=await call('farmer','/farmers/me/procurement-orders/'+po.data.id+'/response',{method:'POST',body:JSON.stringify({decision:'accept',acceptedQuantity:8,reason:'Accepting available harvest quantity'})});
